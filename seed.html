@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="style.css">
+  <title>Extract Seed and Text</title>
+</head>
+<body>
+
+  <h1 class="text-2xl font-semibold mb-6 text-gray-800 dark:text-gray-100">Extracteur de Seed et Texte</h1>
+
+  <div id="dropZone" class="relative flex flex-col items-center justify-center w-full max-w-lg h-64 border-4 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-800 transition-all hover:bg-blue-50 dark:hover:bg-blue-900 hover:border-blue-400 dark:hover:border-blue-500">        
+    <label for="dropzone-file" class="flex flex-col items-center justify-center pt-5 pb-6 z-10">
+      <svg class="w-12 h-12 mb-3 text-blue-400 dark:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+      <p class="mb-2 text-lg font-medium text-gray-500 dark:text-gray-300"><span class="font-semibold">Glissez-déposez</span> ou cliquez pour sélectionner un fichier</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400">Image au format ComfyUI</p>
+      <input id="dropzone-file" type="file" class="hidden" />
+    </label>
+  </div>
+  
+  <p id="result" class=""></p>
+
+  <div id="modal">
+    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-sm w-full">
+      <h2 class="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Entrez l'identifiant</h2>
+      <p class="text-sm mb-4 text-gray-600 dark:text-gray-300">L'identifiant n'a pas été trouvé. Veuillez entrer manuellement l'identifiant (ex. 1290).</p>
+      <input type="text" id="identifierInput" placeholder="Entrez l'identifiant ici" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 mb-4" />
+      <button id="confirmIdentifier" class="w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 mb-2">Confirmer</button>
+      <button id="closeModal" class="w-full bg-gray-400 text-white py-2 rounded-lg hover:bg-gray-500">Annuler</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
