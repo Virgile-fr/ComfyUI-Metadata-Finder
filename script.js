@@ -27,8 +27,8 @@ async function handleFile(file, customIdentifier = null) {
     }
 
     // Vérifier d'abord l'identifiant 1290
-    const defaultIdentifier = "1290";
-    const defaultText2Match = text.match(new RegExp(`"${defaultIdentifier}":\\s*\\{\\s*"inputs":\\s*\\{\\s*"text":\\s*\\[[^\\]]*\\],\\s*"text2":\\s*"([^"]*)`));
+    const defaultIdentifier = "266";
+    const defaultText2Match = text.match(new RegExp(`"${defaultIdentifier}":\\s*\\{\\s*"inputs":\\s*\\{\\s*"Text Multiline":\\s*\\[[^\\]]*\\],\\s*"widgets_values":\\s*"([^"]*)`));
     
     if (defaultText2Match) {
       // Si l'identifiant 1290 est trouvé, afficher son contenu
