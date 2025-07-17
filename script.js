@@ -9,107 +9,47 @@ let currentFile = null;
 
 async function handleFile(file, customIdentifier = null) {
   try {
-    const buffer = await file.arrayBuffer();
-    const view = new DataView(buffer);
-
-    // Vérifier la signature PNG
-    if (view.getUint32(0) !== 0x89504E47 || view.getUint32(4) !== 0x0D0A1A0A) {
-      throw new Error("Le fichier n'est pas un PNG valide.");
-    }
-
-    let offset = 8;
-    let jsonStr = null;
-
-    while (offset < buffer.byteLength) {
-      const length = view.getUint32(offset);
-      offset += 4;
-
-      const type = String.fromCharCode(
-        view.getUint8(offset),
-        view.getUint8(offset + 1),
-        view.getUint8(offset + 2),
-        view.getUint8(offset + 3)
-      );
-      offset += 4;
-
-      const chunkData = new Uint8Array(buffer, offset, length);
-      offset += length;
-
-      const crc = view.getUint32(offset);
-      offset += 4;
-
-      if (type === 'IEND') break;
-
-      if (type === 'tEXt') {
-        let nullIndex = -1;
-        for (let i = 0; i < length; i++) {
-          if (chunkData[i] === 0) {
-            nullIndex = i;
-            break;
-          }
-        }
-
-        if (nullIndex !== -1) {
-          const keyword = new TextDecoder().decode(chunkData.slice(0, nullIndex));
-          const text = new TextDecoder().decode(chunkData.slice(nullIndex + 1));
-
-          if (keyword === 'prompt') {
-            jsonStr = text;
-            break;
-          }
-        }
-      }
-    }
-
-    if (!jsonStr) {
-      throw new Error("Chunk tEXt 'prompt' introuvable.");
-    }
-
-    const data = JSON.parse(jsonStr);
+    const text = await file.text();
     let resultText = "";
 
     // Extraire la seed
-    let seed = null;
-    for (const key in data) {
-      if (data[key].inputs && data[key].inputs.seed !== undefined) {
-        seed = data[key].inputs.seed;
-        break;
-      }
-    }
-
-    if (seed !== null) {
-      result.style.display = "block";
-      result.style.border = "2px solid rgb(0, 255, 166)";
+    const seedMatch = text.match(/"seed":\s*(\d+)/);
+    if (seedMatch) {
+        result.style.display = "block";
+        result.style.border = "2px solid rgb(0, 255, 166)";
+      const seed = seedMatch[1];
       resultText += `Seed : ${seed} (copiée dans le presse-papiers)`;
-      await navigator.clipboard.writeText(seed.toString());
+      await navigator.clipboard.writeText(seed);
     } else {
       resultText += "Seed introuvable dans le fichier.";
       result.style.display = "block";
       result.style.border = "2px solid red";
     }
 
-    // Vérifier d'abord l'identifiant par défaut 266
+    // Vérifier d'abord l'identifiant 1290
     const defaultIdentifier = "266";
-    let promptText = null;
-
-    if (data[defaultIdentifier] && data[defaultIdentifier].inputs && typeof data[defaultIdentifier].inputs.text === 'string') {
-      promptText = data[defaultIdentifier].inputs.text;
-      resultText += `<br>Contenu de text : ${promptText}`;
+    const defaultText2Match = text.match(new RegExp(`"${defaultIdentifier}":\\s*\\{\\s*"inputs":\\s*\\{\\s*"Text Multiline":\\s*\\[[^\\]]*\\],\\s*"widgets_values":\\s*"([^"]*)`));
+    
+    if (defaultText2Match) {
+      // Si l'identifiant 1290 est trouvé, afficher son contenu
+      resultText += `<br>Contenu de text2 : ${defaultText2Match[1]}`;
     } else if (customIdentifier) {
-      if (data[customIdentifier] && data[customIdentifier].inputs && typeof data[customIdentifier].inputs.text === 'string') {
-        promptText = data[customIdentifier].inputs.text;
-        resultText += `<br><br>Contenu de text : ${promptText}`;
+      // Si un identifiant personnalisé est fourni, chercher son contenu
+      const customText2Match = text.match(new RegExp(`"${customIdentifier}":\\s*\\{\\s*"inputs":\\s*\\{\\s*"text":\\s*\\[[^\\]]*\\],\\s*"text2":\\s*"([^"]*)`));
+      if (customText2Match) {
+        resultText += `<br><br>Contenu de text2 : ${customText2Match[1]}`;
       } else {
-        resultText += "<br><br>Contenu text introuvable pour l'identifiant fourni.";
+        resultText += "<br><br>Contenu text2 introuvable pour l'identifiant fourni.";
       }
     } else {
+      // Si ni 1290 ni un identifiant personnalisé n'est trouvé, afficher la modale
       currentFile = file;
       modal.classList.add('active');
     }
 
     result.innerHTML = resultText;
   } catch (error) {
-    result.innerHTML = "Erreur lors de l'extraction des données : " + error.message;
+    result.innerHTML = "Erreur lors de l'extraction des données.";
     console.error(error);
   }
 }
