@@ -9,11 +9,66 @@ let currentFile = null;
 
 async function handleFile(file, customIdentifier = null) {
   try {
-    const text = await file.text();
-    const data = JSON.parse(text);
+    const buffer = await file.arrayBuffer();
+    const view = new DataView(buffer);
+
+    // Vérifier la signature PNG
+    if (view.getUint32(0) !== 0x89504E47 || view.getUint32(4) !== 0x0D0A1A0A) {
+      throw new Error("Le fichier n'est pas un PNG valide.");
+    }
+
+    let offset = 8;
+    let jsonStr = null;
+
+    while (offset < buffer.byteLength) {
+      const length = view.getUint32(offset);
+      offset += 4;
+
+      const type = String.fromCharCode(
+        view.getUint8(offset),
+        view.getUint8(offset + 1),
+        view.getUint8(offset + 2),
+        view.getUint8(offset + 3)
+      );
+      offset += 4;
+
+      const chunkData = new Uint8Array(buffer, offset, length);
+      offset += length;
+
+      const crc = view.getUint32(offset);
+      offset += 4;
+
+      if (type === 'IEND') break;
+
+      if (type === 'tEXt') {
+        let nullIndex = -1;
+        for (let i = 0; i < length; i++) {
+          if (chunkData[i] === 0) {
+            nullIndex = i;
+            break;
+          }
+        }
+
+        if (nullIndex !== -1) {
+          const keyword = new TextDecoder().decode(chunkData.slice(0, nullIndex));
+          const text = new TextDecoder().decode(chunkData.slice(nullIndex + 1));
+
+          if (keyword === 'prompt') {
+            jsonStr = text;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!jsonStr) {
+      throw new Error("Chunk tEXt 'prompt' introuvable.");
+    }
+
+    const data = JSON.parse(jsonStr);
     let resultText = "";
 
-    // Extraire la seed en parcourant les nœuds
+    // Extraire la seed
     let seed = null;
     for (const key in data) {
       if (data[key].inputs && data[key].inputs.seed !== undefined) {
@@ -22,7 +77,7 @@ async function handleFile(file, customIdentifier = null) {
       }
     }
 
-    if (seed) {
+    if (seed !== null) {
       result.style.display = "block";
       result.style.border = "2px solid rgb(0, 255, 166)";
       resultText += `Seed : ${seed} (copiée dans le presse-papiers)`;
@@ -38,11 +93,9 @@ async function handleFile(file, customIdentifier = null) {
     let promptText = null;
 
     if (data[defaultIdentifier] && data[defaultIdentifier].inputs && typeof data[defaultIdentifier].inputs.text === 'string') {
-      // Si l'identifiant 266 est trouvé et text est une string, afficher son contenu
       promptText = data[defaultIdentifier].inputs.text;
       resultText += `<br>Contenu de text : ${promptText}`;
     } else if (customIdentifier) {
-      // Si un identifiant personnalisé est fourni, chercher son contenu
       if (data[customIdentifier] && data[customIdentifier].inputs && typeof data[customIdentifier].inputs.text === 'string') {
         promptText = data[customIdentifier].inputs.text;
         resultText += `<br><br>Contenu de text : ${promptText}`;
@@ -50,14 +103,13 @@ async function handleFile(file, customIdentifier = null) {
         resultText += "<br><br>Contenu text introuvable pour l'identifiant fourni.";
       }
     } else {
-      // Si ni 266 ni un identifiant personnalisé n'est trouvé, afficher la modale
       currentFile = file;
       modal.classList.add('active');
     }
 
     result.innerHTML = resultText;
   } catch (error) {
-    result.innerHTML = "Erreur lors de l'extraction des données.";
+    result.innerHTML = "Erreur lors de l'extraction des données : " + error.message;
     console.error(error);
   }
 }
