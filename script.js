@@ -10,39 +10,47 @@ let currentFile = null;
 async function handleFile(file, customIdentifier = null) {
   try {
     const text = await file.text();
+    const data = JSON.parse(text);
     let resultText = "";
 
-    // Extraire la seed
-    const seedMatch = text.match(/"seed":\s*(\d+)/);
-    if (seedMatch) {
-        result.style.display = "block";
-        result.style.border = "2px solid rgb(0, 255, 166)";
-      const seed = seedMatch[1];
+    // Extraire la seed en parcourant les nœuds
+    let seed = null;
+    for (const key in data) {
+      if (data[key].inputs && data[key].inputs.seed !== undefined) {
+        seed = data[key].inputs.seed;
+        break;
+      }
+    }
+
+    if (seed) {
+      result.style.display = "block";
+      result.style.border = "2px solid rgb(0, 255, 166)";
       resultText += `Seed : ${seed} (copiée dans le presse-papiers)`;
-      await navigator.clipboard.writeText(seed);
+      await navigator.clipboard.writeText(seed.toString());
     } else {
       resultText += "Seed introuvable dans le fichier.";
       result.style.display = "block";
       result.style.border = "2px solid red";
     }
 
-    // Vérifier d'abord l'identifiant 1290
+    // Vérifier d'abord l'identifiant par défaut 266
     const defaultIdentifier = "266";
-    const defaultText2Match = text.match(new RegExp(`"${defaultIdentifier}":\\s*\\{\\s*"inputs":\\s*\\{\\s*"Text Multiline":\\s*\\[[^\\]]*\\],\\s*"widgets_values":\\s*"([^"]*)`));
-    
-    if (defaultText2Match) {
-      // Si l'identifiant 1290 est trouvé, afficher son contenu
-      resultText += `<br>Contenu de text2 : ${defaultText2Match[1]}`;
+    let promptText = null;
+
+    if (data[defaultIdentifier] && data[defaultIdentifier].inputs && typeof data[defaultIdentifier].inputs.text === 'string') {
+      // Si l'identifiant 266 est trouvé et text est une string, afficher son contenu
+      promptText = data[defaultIdentifier].inputs.text;
+      resultText += `<br>Contenu de text : ${promptText}`;
     } else if (customIdentifier) {
       // Si un identifiant personnalisé est fourni, chercher son contenu
-      const customText2Match = text.match(new RegExp(`"${customIdentifier}":\\s*\\{\\s*"inputs":\\s*\\{\\s*"text":\\s*\\[[^\\]]*\\],\\s*"text2":\\s*"([^"]*)`));
-      if (customText2Match) {
-        resultText += `<br><br>Contenu de text2 : ${customText2Match[1]}`;
+      if (data[customIdentifier] && data[customIdentifier].inputs && typeof data[customIdentifier].inputs.text === 'string') {
+        promptText = data[customIdentifier].inputs.text;
+        resultText += `<br><br>Contenu de text : ${promptText}`;
       } else {
-        resultText += "<br><br>Contenu text2 introuvable pour l'identifiant fourni.";
+        resultText += "<br><br>Contenu text introuvable pour l'identifiant fourni.";
       }
     } else {
-      // Si ni 1290 ni un identifiant personnalisé n'est trouvé, afficher la modale
+      // Si ni 266 ni un identifiant personnalisé n'est trouvé, afficher la modale
       currentFile = file;
       modal.classList.add('active');
     }
