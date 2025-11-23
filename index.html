@@ -1,37 +1,390 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="style.css">
-  <title>Extract Seed and Text</title>
+  <meta charset="UTF-8" />
+  <title>Lecteur de prompt ComfyUI</title>
+
+  <!-- PicoCSS pour un rendu propre sans se prendre la tete -->
+  <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2/css/pico.min.css">
+
+  <!-- Pako pour decompresser zTXt / iTXt -->
+  <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+
+  <style>
+    body {
+      padding: 2rem 0;
+    }
+    #drop-zone {
+      border: 2px dashed var(--pico-primary);
+      border-radius: 0.75rem;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    #drop-zone.dragover {
+      background: rgba(0,0,0,0.03);
+      border-color: var(--pico-primary-hover);
+    }
+    pre {
+      max-height: 320px;
+      overflow: auto;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .meta-grid {
+      display: grid;
+      gap: 1.5rem;
+    }
+    @media (min-width: 900px) {
+      .meta-grid {
+        grid-template-columns: 1.5fr 1fr;
+      }
+    }
+    img.preview {
+      max-width: 100%;
+      height: auto;
+      border-radius: 0.5rem;
+    }
+    small.muted {
+      color: var(--pico-muted-color);
+    }
+  </style>
 </head>
 <body>
+  <main class="container">
+    <header>
+      <h1>Lecteur de prompt ComfyUI</h1>
+      <p>Glisse un PNG genere par ComfyUI pour afficher le prompt positif (Description) et le prompt negatif.</p>
+    </header>
 
-  <h1 class="text-2xl font-semibold mb-6 text-gray-800 dark:text-gray-100">Extracteur de Seed et Texte</h1>
+    <section id="upload-section">
+      <div id="drop-zone">
+        <p><strong>Glisser deposer</strong> une image PNG ici</p>
+        <p class="muted">ou clique pour choisir un fichier</p>
+        <input id="file-input" type="file" accept="image/png" style="display:none" />
+      </div>
+    </section>
 
-  <div id="dropZone" class="relative flex flex-col items-center justify-center w-full max-w-lg h-64 border-4 border-dashed border-gray-300 rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-800 transition-all hover:bg-blue-50 dark:hover:bg-blue-900 hover:border-blue-400 dark:hover:border-blue-500">        
-    <label for="dropzone-file" class="flex flex-col items-center justify-center pt-5 pb-6 z-10">
-      <svg class="w-12 h-12 mb-3 text-blue-400 dark:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-      <p class="mb-2 text-lg font-medium text-gray-500 dark:text-gray-300"><span class="font-semibold">Glissez-déposez</span> ou cliquez pour sélectionner un fichier</p>
-      <p class="text-xs text-gray-500 dark:text-gray-400">Image au format ComfyUI</p>
-      <input id="dropzone-file" type="file" class="hidden" />
-    </label>
-  </div>
-  
-  <p id="result" class=""></p>
+    <section id="results" style="display:none; margin-top:2rem;">
+      <article>
+        <header>
+          <h2>Resultat</h2>
+          <p id="file-info"></p>
+        </header>
 
-  <div id="modal">
-    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-sm w-full">
-      <h2 class="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Entrez l'identifiant</h2>
-      <p class="text-sm mb-4 text-gray-600 dark:text-gray-300">L'identifiant n'a pas été trouvé. Veuillez entrer manuellement l'identifiant (ex. 1290).</p>
-      <input type="text" id="identifierInput" placeholder="Entrez l'identifiant ici" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 mb-4" />
-      <button id="confirmIdentifier" class="w-full bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 mb-2">Confirmer</button>
-      <button id="closeModal" class="w-full bg-gray-400 text-white py-2 rounded-lg hover:bg-gray-500">Annuler</button>
-    </div>
-  </div>
+        <div class="meta-grid">
+          <div>
+            <h3>Prompt positif - Description</h3>
+            <p class="muted">Extrait du champ <code>Description</code> dans les metadonnees <code>extra</code>.</p>
+            <pre id="description-text">(aucun champ Description trouve)</pre>
 
-  <script src="script.js"></script>
+            <h3 style="margin-top:1.5rem;">Prompt negatif complet</h3>
+            <p class="muted">Extrait du noeud <code>NEG</code> dans le chunk <code>prompt</code>.</p>
+            <pre id="negative-text">(aucun prompt negatif trouve)</pre>
+
+            <details style="margin-top:1.5rem;">
+              <summary>Debug - chunk "extra" brut</summary>
+              <pre id="extra-raw"></pre>
+            </details>
+
+            <details style="margin-top:1rem;">
+              <summary>Debug - chunk "prompt" complet</summary>
+              <pre id="prompt-text"></pre>
+            </details>
+
+            <details style="margin-top:1rem;">
+              <summary>Debug - chunk "workflow" complet</summary>
+              <pre id="workflow-text"></pre>
+            </details>
+          </div>
+
+          <div>
+            <h3>Apercu</h3>
+            <figure>
+              <img id="preview" class="preview" alt="Apercu de l'image" />
+              <figcaption><small class="muted">Image telle que chargee depuis le fichier.</small></figcaption>
+            </figure>
+
+            <details style="margin-top:1.5rem;">
+              <summary>Tous les chunks texte detectes</summary>
+              <pre id="all-text-chunks"></pre>
+            </details>
+          </div>
+        </div>
+      </article>
+
+      <footer style="margin-top:2rem;">
+        <small class="muted">Tout se fait localement dans ton navigateur, aucun envoi en ligne.</small>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    const dropZone = document.getElementById("drop-zone");
+    const fileInput = document.getElementById("file-input");
+    const resultsSection = document.getElementById("results");
+    const fileInfo = document.getElementById("file-info");
+    const previewImg = document.getElementById("preview");
+
+    const descriptionText = document.getElementById("description-text");
+    const negativeText = document.getElementById("negative-text");
+    const extraRaw = document.getElementById("extra-raw");
+    const promptText = document.getElementById("prompt-text");
+    const workflowText = document.getElementById("workflow-text");
+    const allTextChunks = document.getElementById("all-text-chunks");
+
+    const latin1Decoder = new TextDecoder("latin1");
+    const utf8Decoder = new TextDecoder("utf-8");
+
+    function handleFiles(files) {
+      if (!files || !files.length) return;
+      const file = files[0];
+
+      if (file.type && file.type !== "image/png") {
+        alert("Ce fichier ne semble pas etre un PNG. Je tente quand meme.");
+      }
+
+      fileInfo.textContent = `Fichier: ${file.name} (${(file.size / 1024).toFixed(1)} Ko)`;
+      previewImg.src = URL.createObjectURL(file);
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const buffer = e.target.result;
+          const textChunks = extractPngTextChunks(buffer);
+          showMetadata(textChunks);
+          resultsSection.style.display = "block";
+        } catch (err) {
+          console.error(err);
+          alert("Erreur pendant la lecture des metadonnees PNG.");
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function extractPngTextChunks(arrayBuffer) {
+      const dataView = new DataView(arrayBuffer);
+      const bytes = new Uint8Array(arrayBuffer);
+
+      const sig = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+      for (let i = 0; i < sig.length; i++) {
+        if (bytes[i] !== sig[i]) {
+          throw new Error("Ce fichier ne semble pas etre un PNG valide.");
+        }
+      }
+
+      let pos = 8;
+      const textChunks = [];
+
+      while (pos + 8 <= dataView.byteLength) {
+        const length = dataView.getUint32(pos);
+        pos += 4;
+
+        if (pos + 4 > dataView.byteLength) break;
+        let type = "";
+        for (let i = 0; i < 4; i++) {
+          type += String.fromCharCode(dataView.getUint8(pos + i));
+        }
+        pos += 4;
+
+        if (pos + length + 4 > dataView.byteLength) break;
+        const chunkData = new Uint8Array(arrayBuffer, pos, length);
+        pos += length;
+        pos += 4; // CRC
+
+        if (type === "tEXt") {
+          const sep = chunkData.indexOf(0);
+          if (sep >= 0) {
+            const keyword = latin1Decoder.decode(chunkData.slice(0, sep));
+            const text = latin1Decoder.decode(chunkData.slice(sep + 1));
+            textChunks.push({ type, keyword, text });
+          }
+        } else if (type === "zTXt") {
+          const sep = chunkData.indexOf(0);
+          if (sep >= 0) {
+            const keyword = latin1Decoder.decode(chunkData.slice(0, sep));
+            const compressionMethod = chunkData[sep + 1];
+            const compressed = chunkData.slice(sep + 2);
+            try {
+              const decompressed = pako.inflate(compressed);
+              const text = latin1Decoder.decode(decompressed);
+              textChunks.push({ type, keyword, text, compressionMethod });
+            } catch (e) {
+              console.warn("Echec decompression zTXt", e);
+            }
+          }
+        } else if (type === "iTXt") {
+          let offset = 0;
+          function readNullTerminated(decoder) {
+            const start = offset;
+            while (offset < chunkData.length && chunkData[offset] !== 0) {
+              offset++;
+            }
+            const out = decoder.decode(chunkData.slice(start, offset));
+            offset++;
+            return out;
+          }
+
+          const keyword = readNullTerminated(latin1Decoder);
+          const compressionFlag = chunkData[offset++];
+          const compressionMethod = chunkData[offset++];
+          const languageTag = readNullTerminated(latin1Decoder);
+          const translatedKeyword = readNullTerminated(utf8Decoder);
+          let textBytes = chunkData.slice(offset);
+
+          if (compressionFlag === 1) {
+            try {
+              textBytes = pako.inflate(textBytes);
+            } catch (e) {
+              console.warn("Echec decompression iTXt", e);
+            }
+          }
+          const text = utf8Decoder.decode(textBytes);
+
+          textChunks.push({
+            type,
+            keyword,
+            text,
+            compressionFlag,
+            compressionMethod,
+            languageTag,
+            translatedKeyword,
+          });
+        }
+      }
+
+      return textChunks;
+    }
+
+    function safeJsonParse(str) {
+      try {
+        return JSON.parse(str);
+      } catch {
+        return null;
+      }
+    }
+
+    function extractDescriptionFromExtra(extraChunk) {
+      if (!extraChunk || !extraChunk.text) return null;
+      const raw = extraChunk.text.trim();
+
+      const parsed = safeJsonParse(raw);
+      let containerStr;
+
+      if (parsed && typeof parsed === "object" && typeof parsed.Description === "string") {
+        return parsed.Description;
+      }
+
+      if (typeof parsed === "string") {
+        containerStr = parsed;
+      } else {
+        containerStr = raw;
+      }
+
+      const match = containerStr.match(/"Description"\s*:\s*"([\s\S]*?)"/);
+      if (!match) return null;
+
+      let desc = match[1];
+      desc = desc
+        .replace(/\\"/g, '"')
+        .replace(/\\n/g, "\n")
+        .replace(/\\\\/g, "\\");
+
+      return desc;
+    }
+
+    function extractNegativePromptFromPromptChunk(promptChunk) {
+      if (!promptChunk || !promptChunk.text) return null;
+
+      const obj = safeJsonParse(promptChunk.text);
+      if (!obj || typeof obj !== "object") return null;
+
+      const nodes = Object.values(obj);
+      const candidates = [];
+
+      for (const node of nodes) {
+        if (!node || typeof node !== "object") continue;
+        const title = node._meta && typeof node._meta.title === "string"
+          ? node._meta.title.toLowerCase()
+          : "";
+        const txt = node.inputs && typeof node.inputs.text === "string"
+          ? node.inputs.text
+          : null;
+
+        if (!txt) continue;
+
+        if (title === "neg" || title === "negative" || /neg/.test(title)) {
+          candidates.push(txt);
+        }
+      }
+
+      if (candidates.length) {
+        const unique = [...new Set(candidates)];
+        return unique.join("\n\n");
+      }
+
+      // Fallback - on prend le plus long texte parmi les inputs.text
+      const allText = [];
+      for (const node of nodes) {
+        if (!node || typeof node !== "object") continue;
+        const txt = node.inputs && typeof node.inputs.text === "string"
+          ? node.inputs.text
+          : null;
+        if (txt) allText.push(txt);
+      }
+      if (!allText.length) return null;
+      allText.sort((a, b) => b.length - a.length);
+      return allText[0];
+    }
+
+    function showMetadata(textChunks) {
+      allTextChunks.textContent = textChunks
+        .map((c, idx) => `#${idx + 1} [${c.type}] keyword="${c.keyword}"\n${c.text}\n`)
+        .join("\n-----------------------------\n");
+
+      const extraChunk = textChunks.find(c => c.keyword === "extra");
+      const promptChunk = textChunks.find(c => c.keyword === "prompt");
+      const workflowChunk = textChunks.find(c => c.keyword === "workflow");
+
+      extraRaw.textContent = extraChunk ? extraChunk.text : "(aucun chunk extra)";
+
+      const desc = extractDescriptionFromExtra(extraChunk);
+      descriptionText.textContent = desc || "(aucun champ Description trouve dans extra)";
+
+      const neg = extractNegativePromptFromPromptChunk(promptChunk);
+      negativeText.textContent = neg || "(aucun prompt negatif trouve)";
+
+      promptText.textContent = promptChunk ? promptChunk.text : "(aucun chunk prompt)";
+      workflowText.textContent = workflowChunk ? workflowChunk.text : "(aucun chunk workflow)";
+    }
+
+    // Drag and drop
+    dropZone.addEventListener("click", () => fileInput.click());
+
+    dropZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.add("dragover");
+    });
+
+    dropZone.addEventListener("dragleave", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove("dragover");
+    });
+
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.classList.remove("dragover");
+      handleFiles(e.dataTransfer.files);
+    });
+
+    fileInput.addEventListener("change", (e) => {
+      handleFiles(e.target.files);
+    });
+  </script>
 </body>
 </html>
