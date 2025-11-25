@@ -1977,32 +1977,53 @@
       applyFiltersAndRender();
     }
 
-    function isSelectorMatch(entry, selector) {
-      if (!selector) return false;
-      if (
-        selector.nodeId &&
-        selector.inputKey &&
-        entry.nodeId === selector.nodeId &&
-        entry.inputKey === selector.inputKey
-      ) {
-        return true;
+    function makeEntryKey(entry) {
+      return [
+        entry.nodeId || "",
+        entry.inputKey || "",
+        entry.title || "",
+        entry.class_type || ""
+      ].join("::");
+    }
+
+    function findBestEntryKeyForSelector(selector, entries) {
+      if (!selector || !entries || !entries.length) return null;
+
+      const exact = [];
+      const soft = [];
+
+      for (const e of entries) {
+        if (!e) continue;
+
+        if (selector.nodeId && selector.inputKey &&
+            e.nodeId === selector.nodeId &&
+            e.inputKey === selector.inputKey) {
+          exact.push(e);
+        } else if (
+          selector.title &&
+          selector.class_type &&
+          selector.inputKey &&
+          e.title === selector.title &&
+          e.class_type === selector.class_type &&
+          e.inputKey === selector.inputKey
+        ) {
+          soft.push(e);
+        }
       }
-      if (
-        selector.title &&
-        selector.class_type &&
-        selector.inputKey &&
-        entry.title === selector.title &&
-        entry.class_type === selector.class_type &&
-        entry.inputKey === selector.inputKey
-      ) {
-        return true;
-      }
-      return false;
+
+      const chosen = exact.length ? exact[0] : (soft.length ? soft[0] : null);
+      return chosen ? makeEntryKey(chosen) : null;
     }
 
     function buildNodesFromEntries(entries, posSelector, negSelector) {
       const byNode = new Map();
+
+      const posEntryKey = posSelector ? findBestEntryKeyForSelector(posSelector, entries) : null;
+      const negEntryKey = negSelector ? findBestEntryKeyForSelector(negSelector, entries) : null;
+
       for (const entry of entries) {
+        const key = makeEntryKey(entry);
+
         let node = byNode.get(entry.nodeId);
         if (!node) {
           node = {
@@ -2016,12 +2037,11 @@
           byNode.set(entry.nodeId, node);
         }
 
-        const isPos = isSelectorMatch(entry, posSelector);
-        const isNeg = isSelectorMatch(entry, negSelector);
-        entry.isPositiveSource = isPos;
-        entry.isNegativeSource = isNeg;
-        if (isPos) node.hasPositiveSource = true;
-        if (isNeg) node.hasNegativeSource = true;
+        entry.isPositiveSource = posEntryKey && key === posEntryKey;
+        entry.isNegativeSource = negEntryKey && key === negEntryKey;
+
+        if (entry.isPositiveSource) node.hasPositiveSource = true;
+        if (entry.isNegativeSource) node.hasNegativeSource = true;
 
         node.entries.push(entry);
       }
