@@ -1,125 +1,1300 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Lecteur de prompt ComfyUI</title>
+  <title>ComfyUI Prompt Reader</title>
 
-  <!-- PicoCSS pour un rendu propre sans se prendre la tete -->
-  <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2/css/pico.min.css">
+  <!-- Pako from CDNJS -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 
-  <!-- Pako pour decompresser zTXt / iTXt -->
-  <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+  <!-- Favicon, blue background + puzzle emoji -->
+  <link
+    rel="icon"
+    id="favicon"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' ry='14' fill='%231d4ed8'/%3E%3Ctext y='52%25' x='50%25' dominant-baseline='middle' text-anchor='middle' font-size='38'%3E🧩%3C/text%3E%3C/svg%3E"
+  />
 
   <style>
-    body {
-      padding: 2rem 0;
+    :root {
+      color-scheme: dark light;
+      --bg: #020617;
+      --bg-elevated: #020617;
+      --bg-soft: #020617;
+      --bg-softer: #020617;
+      --border: #1f2937;
+      --border-soft: #111827;
+      --border-strong: #4b5563;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --accent: #3b82f6;
+      --accent-soft: rgba(59,130,246,0.18);
+      --positive: #22c55e;
+      --negative: #ef4444;
+      --neutral: #6366f1;
+      --radius-lg: 0.9rem;
+      --radius-md: 0.6rem;
+      --shadow-soft: 0 18px 40px rgba(15,23,42,0.9);
+      --shadow-strong: 0 22px 55px rgba(15,23,42,1);
+      --transition-fast: 140ms ease-out;
+      --transition-med: 180ms ease-out;
     }
+    * {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    body.minimal-mode {
+      background: radial-gradient(circle at top, rgba(37,99,235,0.12), transparent 55%), #020617;
+    }
+
+    main.app {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.75rem 1.25rem 2.75rem;
+    }
+
+    header.app-header {
+      margin-bottom: 1.6rem;
+      text-align: center;
+    }
+
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 1.25rem 1.5rem 1.35rem;
+      border-radius: 1.1rem;
+      border: 1px solid rgba(31,41,55,0.95);
+      background:
+        radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 62%),
+        radial-gradient(circle at bottom right, rgba(59,130,246,0.22), transparent 60%),
+        linear-gradient(135deg, #020617, #020617);
+      box-shadow: var(--shadow-strong);
+      width: 100%;
+    }
+
+    .hero-icon {
+      font-size: 2.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hero-title {
+      font-size: clamp(1.4rem, 2.1vw, 1.9rem);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      letter-spacing: 0.02em;
+    }
+
+    .hero-subtitle {
+      font-size: 0.9rem;
+      color: var(--muted);
+      max-width: 560px;
+      line-height: 1.5;
+    }
+
+    .hero-tags {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.45rem;
+      margin-top: 0.2rem;
+    }
+
+    .hero-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      padding: 0.22rem 0.75rem;
+      border-radius: 999px;
+      border: 1px solid rgba(31,41,55,0.9);
+      background: rgba(15,23,42,0.98);
+      backdrop-filter: blur(10px);
+    }
+
+    .top-bar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+      margin-bottom: 1.05rem;
+    }
+    .top-bar-left {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .file-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      padding: 0.24rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid rgba(31,41,55,0.9);
+      background: #020617;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .file-pill span.label {
+      flex-shrink: 0;
+      opacity: 0.85;
+    }
+    .file-pill span.value {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      padding: 0.24rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      background: rgba(15,23,42,0.92);
+      backdrop-filter: blur(10px);
+    }
+
+    #minimal-bar {
+      display: none;
+      margin-bottom: 0.85rem;
+      font-size: 0.8rem;
+      color: var(--muted);
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      padding: 0.45rem 0.85rem;
+      border-radius: 0.8rem;
+      border: 1px solid rgba(37,99,235,0.6);
+      background: rgba(15,23,42,0.96);
+    }
+    .minimal-hint {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      min-width: 0;
+    }
+    .minimal-hint span:last-child {
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+    .minimal-actions {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+
+    #upload-section {
+      margin-bottom: 1.25rem;
+    }
+
     #drop-zone {
-      border: 2px dashed var(--pico-primary);
-      border-radius: 0.75rem;
-      padding: 2.5rem 1.5rem;
+      border: 1px dashed rgba(148,163,184,0.95);
+      border-radius: 1rem;
+      padding: 1.4rem 1.2rem;
       text-align: center;
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        transform 120ms ease-out,
+        box-shadow 140ms ease-out;
+      background: #020617;
+      box-shadow: var(--shadow-soft);
+      position: relative;
+      overflow: hidden;
+    }
+    #drop-zone-inner {
+      position: relative;
+      z-index: 1;
     }
     #drop-zone.dragover {
-      background: rgba(0,0,0,0.03);
-      border-color: var(--pico-primary-hover);
+      border-color: var(--accent);
+      transform: translateY(-1px);
+      background: #020617;
+      box-shadow: 0 22px 55px rgba(15,23,42,1);
     }
+    #drop-zone-title {
+      font-size: 0.95rem;
+      font-weight: 500;
+      margin-bottom: 0.3rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+    #drop-zone-title span.icon {
+      font-size: 1.1rem;
+    }
+    #drop-zone p {
+      margin: 0.1rem 0;
+    }
+    #drop-zone .secondary-text {
+      font-size: 0.84rem;
+      color: var(--muted);
+    }
+    #drop-zone-hint {
+      margin-top: 0.45rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: center;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+      opacity: 0.9;
+    }
+    #drop-zone kbd {
+      font-size: 0.78rem;
+      padding: 0.08rem 0.28rem;
+      border-radius: 0.35rem;
+      border: 1px solid rgba(55,65,81,0.95);
+      background: rgba(15,23,42,0.95);
+      color: var(--muted);
+    }
+
+    body.minimal-mode #upload-section {
+      margin-bottom: 0.65rem;
+    }
+    body.minimal-mode #drop-zone {
+      display: none;
+    }
+
+    button {
+      cursor: pointer;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      background: var(--bg-soft);
+      color: var(--text);
+      padding: 0.35rem 0.9rem;
+      font-size: 0.82rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      white-space: nowrap;
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        box-shadow var(--transition-fast),
+        transform 80ms ease-out;
+    }
+    button.secondary {
+      background: #020617;
+    }
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+      box-shadow: 0 6px 20px rgba(59,130,246,0.5);
+    }
+    button:hover {
+      border-color: var(--accent);
+      background: #020617;
+      box-shadow: 0 10px 28px rgba(15,23,42,0.9);
+    }
+    button.primary:hover {
+      background: #2563eb;
+      box-shadow: 0 10px 28px rgba(37,99,235,0.7);
+    }
+    button:active {
+      transform: translateY(1px);
+      box-shadow: 0 4px 16px rgba(15,23,42,0.8);
+    }
+    button:focus-visible {
+      outline: 2px solid rgba(59,130,246,0.9);
+      outline-offset: 2px;
+    }
+    button.minimal-toggle-active {
+      border-color: var(--accent);
+      background: rgba(37,99,235,0.18);
+      box-shadow: 0 10px 26px rgba(37,99,235,0.4);
+    }
+
     pre {
-      max-height: 320px;
-      overflow: auto;
-      font-size: 0.9rem;
+      max-height: 20rem;
+      max-width: 100%;
       white-space: pre-wrap;
       word-wrap: break-word;
+      word-break: break-word;
+      background: var(--bg-softer);
+      border-radius: var(--radius-md);
+      padding: 0.8rem 0.9rem;
+      border: 1px solid var(--border-soft);
+      font-size: 0.84rem;
+      overflow-y: auto;
+      overflow-x: auto;
+      line-height: 1.45;
+      box-sizing: border-box;
+      position: relative;
+      margin: 0.45rem 0 0.45rem;
     }
-    .meta-grid {
+    pre::after {
+      content: "";
+      position: sticky;
+      display: block;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      height: 1.3rem;
+      background: linear-gradient(to top, rgba(2,6,23,0.96), transparent);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity var(--transition-fast);
+    }
+    pre:hover::after {
+      opacity: 1;
+    }
+
+    .card-positive {
+      border-color: rgba(55,65,81,0.95);
+    }
+    .card-negative {
+      border-color: rgba(55,65,81,0.95);
+    }
+    #description-text {
+      border-color: rgba(34,197,94,0.7);
+    }
+    #negative-text {
+      border-color: rgba(248,113,113,0.75);
+    }
+
+    .layout {
       display: grid;
-      gap: 1.5rem;
+      gap: 1.25rem;
+      margin-top: 1.25rem;
+      align-items: flex-start;
     }
-    @media (min-width: 900px) {
-      .meta-grid {
-        grid-template-columns: 1.5fr 1fr;
+    @media (min-width: 960px) {
+      .layout {
+        grid-template-columns: 1.6fr 1.1fr;
       }
+    }
+
+    .card {
+      background: var(--bg-elevated);
+      border-radius: var(--radius-lg);
+      padding: 1.05rem 1rem 1.05rem;
+      border: 1px solid rgba(31,41,55,0.95);
+      box-shadow: var(--shadow-soft);
+    }
+    .card + .card {
+      margin-top: 0.85rem;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.55rem;
+      flex-wrap: wrap;
+    }
+    .card-title {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.98rem;
+      font-weight: 500;
+    }
+    .card-title span.icon {
+      font-size: 1.1rem;
+    }
+    .card-subtitle {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 0.55rem;
+      line-height: 1.4;
+    }
+    .card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      justify-content: flex-end;
+    }
+
+    .card-positive,
+    .card-negative {
+      transition:
+        border-color var(--transition-fast),
+        box-shadow var(--transition-fast),
+        transform 80ms ease-out,
+        background var(--transition-fast);
+      cursor: pointer;
+    }
+    .card-positive:hover {
+      border-color: rgba(34,197,94,0.9);
+      box-shadow: 0 0 0 1px rgba(34,197,94,0.45), var(--shadow-soft);
+      background:
+        radial-gradient(circle at top left, rgba(34,197,94,0.18), transparent 58%),
+        #020617;
+    }
+    .card-negative:hover {
+      border-color: rgba(248,113,113,0.9);
+      box-shadow: 0 0 0 1px rgba(239,68,68,0.5), var(--shadow-soft);
+      background:
+        radial-gradient(circle at top left, rgba(239,68,68,0.2), transparent 58%),
+        #020617;
+    }
+
+    .card-debug .card-header {
+      margin-bottom: 0.35rem;
+    }
+
+    .inputs-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.55rem;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.45rem;
+      margin-top: 0.1rem;
+    }
+    .inputs-search {
+      flex: 1 1 160px;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.18rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      background: #020617;
+      font-size: 0.8rem;
+      min-height: 0;
+    }
+    .inputs-search-icon {
+      font-size: 0.9rem;
+      opacity: 0.8;
+    }
+    #inputs-search {
+      border: none;
+      outline: none;
+      background: transparent;
+      color: var(--text);
+      font-size: 0.8rem;
+      width: 100%;
+      padding: 0;
+      line-height: 1.2;
+    }
+    #inputs-search::placeholder {
+      color: var(--muted);
+    }
+    .inputs-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+      justify-content: flex-end;
+    }
+    .filter-pill {
+      font-size: 0.75rem;
+      padding: 0.16rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid var(--border-soft);
+      background: #020617;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      cursor: pointer;
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        color var(--transition-fast),
+        box-shadow var(--transition-fast);
+    }
+    .filter-pill span.icon {
+      font-size: 0.85rem;
+    }
+    .filter-pill:hover {
+      border-color: var(--accent);
+      color: var(--text);
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.45);
+    }
+    .filter-pill.active {
+      border-color: var(--accent);
+      background: rgba(37,99,235,0.18);
+      color: var(--text);
+      box-shadow: 0 0 0 1px rgba(37,99,235,0.5);
+    }
+
+    .prompt-text-list {
+      max-height: 20rem;
+      overflow-y: auto;
+      border-radius: var(--radius-md);
+      padding: 0.35rem 0.45rem 0.5rem;
+      background: #020617;
+      border: 1px solid var(--border-soft);
+      font-size: 0.84rem;
+      scrollbar-width: none;
+    }
+    .prompt-text-list::-webkit-scrollbar {
+      display: none;
+    }
+
+    .inputs-node {
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-soft);
+      background: #020617;
+      padding: 0.6rem 0.7rem 0.65rem;
+      margin-bottom: 0.55rem;
+      transition:
+        border-color var(--transition-fast),
+        background var(--transition-fast),
+        box-shadow var(--transition-fast);
+    }
+    .inputs-node:hover {
+      border-color: rgba(59,130,246,0.55);
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.3);
+      background: #020617;
+    }
+    .inputs-node-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.35rem;
+      flex-wrap: wrap;
+    }
+    .inputs-node-main {
+      display: flex;
+      flex-direction: column;
+      gap: 0.14rem;
+      min-width: 0;
+    }
+    .inputs-node-title {
+      font-size: 0.86rem;
+      font-weight: 500;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+    .inputs-node-meta {
+      font-size: 0.76rem;
+      color: var(--muted);
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+    .inputs-node-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.25rem;
+    }
+    .node-badge {
+      font-size: 0.7rem;
+      padding: 0.12rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.9);
+      background: #020617;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .node-badge.positive {
+      border-color: rgba(34,197,94,0.8);
+      color: #bbf7d0;
+    }
+    .node-badge.negative {
+      border-color: rgba(248,113,113,0.85);
+      color: #fecaca;
+    }
+    .inputs-node-body {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .prompt-text-item {
+      position: relative;
+      border-radius: 0.55rem;
+      padding: 0.55rem 0.7rem 0.55rem 0.75rem;
+      margin-bottom: 0;
+      background: #020617;
+      border: 1px solid var(--border-soft);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      line-height: 1.35;
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        box-shadow var(--transition-fast),
+        transform 80ms ease-out;
+      padding-right: 6.5rem;
+      min-height: 2.1rem;
+    }
+    .prompt-text-item:hover {
+      background:
+        radial-gradient(circle at top left, rgba(59,130,246,0.18), transparent 58%),
+        #020617;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.5);
+      transform: translateY(-1px);
+    }
+    .entry-positive-source {
+      border-color: rgba(34,197,94,0.7);
+      box-shadow: 0 0 0 1px rgba(34,197,94,0.25);
+    }
+    .entry-negative-source {
+      border-color: rgba(248,113,113,0.8);
+      box-shadow: 0 0 0 1px rgba(220,38,38,0.3);
+    }
+
+    .inputs-entry-key {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 0.12rem;
+    }
+
+    .chip-bar {
+      position: absolute;
+      right: 0.35rem;
+      top: 0.35rem;
+      display: flex;
+      gap: 0.25rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--transition-fast), transform var(--transition-fast);
+      transform: translateY(2px);
+    }
+    .prompt-text-item:hover .chip-bar {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .chip-btn {
+      font-size: 0.68rem;
+      padding: 0.14rem 0.4rem;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,0.8);
+      background: #020617;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      transition:
+        background var(--transition-fast),
+        border-color var(--transition-fast),
+        color var(--transition-fast),
+        box-shadow var(--transition-fast),
+        transform 80ms ease-out;
+    }
+    .chip-btn.copy {
+      border-color: rgba(148,163,184,0.8);
+    }
+    .chip-btn.pos {
+      border-color: rgba(34,197,94,0.7);
+      color: #bbf7d0;
+    }
+    .chip-btn.neg {
+      border-color: rgba(248,113,113,0.7);
+      color: #fecaca;
+    }
+    .chip-btn:hover {
+      border-color: var(--accent);
+      background: #020617;
+      color: var(--text);
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.45);
+    }
+    .chip-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.6);
+    }
+
+    .preview-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+    .preview-image {
+      background: #020617;
+      border-radius: 0.95rem;
+      padding: 0.7rem;
+      border: 1px solid var(--border-soft);
+      max-height: 70vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
     img.preview {
       max-width: 100%;
+      max-height: 65vh;
       height: auto;
-      border-radius: 0.5rem;
+      width: auto;
+      border-radius: 0.75rem;
+      display: block;
+      object-fit: contain;
+      box-shadow: 0 18px 45px rgba(15,23,42,0.9);
     }
-    small.muted {
-      color: var(--pico-muted-color);
+    .preview-meta {
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .card-debug {
+      cursor: pointer;
+    }
+    .card-debug pre {
+      cursor: text;
+    }
+
+    .card-history {
+      margin-top: 0.85rem;
+    }
+    .history-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+    }
+    .history-empty {
+      font-size: 0.8rem;
+      color: var(--muted);
+      opacity: 0.9;
+    }
+    .history-item-btn {
+      width: 100%;
+      text-align: left;
+      background: #020617;
+      border-radius: 0.55rem;
+      border: 1px solid var(--border-soft);
+      padding: 0.4rem 0.65rem;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition:
+        border-color var(--transition-fast),
+        background var(--transition-fast),
+        transform 80ms ease-out,
+        box-shadow var(--transition-fast);
+    }
+    .history-item-main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      gap: 0.06rem;
+    }
+    .history-item-name {
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      color: var(--text);
+    }
+    .history-item-meta {
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .history-item-btn:hover {
+      border-color: var(--accent);
+      background: #020617;
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.35);
+      transform: translateY(-1px);
+    }
+    .history-item-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.6);
+    }
+
+    .history-item-btn.selected {
+      border-color: var(--accent);
+      background:
+        radial-gradient(circle at top left, rgba(59,130,246,0.2), transparent 60%),
+        #020617;
+      box-shadow: 0 0 0 1px rgba(59,130,246,0.5);
+    }
+
+    .history-thumb-wrap {
+      width: 40px;
+      height: 40px;
+      border-radius: 0.5rem;
+      overflow: hidden;
+      flex-shrink: 0;
+      background: #020617;
+      border: 1px solid var(--border-soft);
+    }
+    .history-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    footer.app-footer {
+      margin-top: auto;
+      padding: 0.9rem 1.25rem 1.2rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      text-align: center;
+      opacity: 0.9;
+    }
+    footer.app-footer span.lock {
+      margin-right: 0.35rem;
+    }
+
+    body.minimal-mode .app-header,
+    body.minimal-mode .top-bar,
+    body.minimal-mode .card-inputs,
+    body.minimal-mode .card-debug,
+    body.minimal-mode .card-history,
+    body.minimal-mode footer.app-footer {
+      display: none !important;
+    }
+
+    body.minimal-mode #minimal-bar {
+      display: flex;
+    }
+    body:not(.minimal-mode) #minimal-bar {
+      display: none;
+    }
+
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: 1.7rem;
+      transform: translateX(-50%) translateY(20px);
+      padding: 0.7rem 1rem;
+      border-radius: 999px;
+      background: rgba(15,23,42,0.97);
+      border: 1px solid rgba(148,163,184,0.8);
+      box-shadow: 0 18px 40px rgba(15,23,42,0.95);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.85rem;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 1000;
+      min-width: 220px;
+      max-width: 90vw;
+      justify-content: center;
+      backdrop-filter: blur(16px);
+      box-sizing: border-box;
+    }
+    #toast-icon {
+      font-size: 1rem;
+    }
+    #toast.show {
+      animation: toast-in 150ms ease-out forwards, toast-out 250ms ease-in forwards;
+      animation-delay: 0s, 1.7s;
+      pointer-events: auto;
+    }
+    #toast.toast-positive {
+      border-color: rgba(34,197,94,0.85);
+      box-shadow: 0 18px 45px rgba(22,163,74,0.55);
+    }
+    #toast.toast-negative {
+      border-color: rgba(248,113,113,0.9);
+      box-shadow: 0 18px 45px rgba(220,38,38,0.55);
+    }
+    #toast.toast-neutral {
+      border-color: rgba(129,140,248,0.9);
+      box-shadow: 0 18px 45px rgba(79,70,229,0.55);
+    }
+
+    @keyframes toast-in {
+      from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(24px) scale(0.96);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+      }
+    }
+    @keyframes toast-out {
+      from {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0) scale(1);
+      }
+      to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(10px) scale(0.98);
+      }
+    }
+
+    #drop-overlay {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      backdrop-filter: blur(18px);
+      background: rgba(15,23,42,0.78);
+      border: 2px dashed rgba(148,163,184,0.9);
+      pointer-events: none;
+    }
+    #drop-overlay-inner {
+      text-align: center;
+      padding: 1.5rem 2rem;
+      border-radius: 1rem;
+      background: rgba(15,23,42,0.85);
+      border: 1px solid rgba(55,65,81,0.95);
+      box-shadow: 0 24px 60px rgba(15,23,42,1);
+      pointer-events: auto;
+    }
+    #drop-overlay-emoji {
+      font-size: 2.4rem;
+      margin-bottom: 0.5rem;
+    }
+    #drop-overlay-title {
+      font-size: 1rem;
+      font-weight: 500;
+      margin-bottom: 0.3rem;
+    }
+    #drop-overlay-text {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    @media (max-width: 850px) {
+      .container {
+        padding-inline: 1rem;
+      }
+      .top-bar {
+        align-items: flex-start;
+      }
+    }
+    @media (max-width: 640px) {
+      .card {
+        padding: 0.95rem 0.9rem 1.0rem;
+      }
+      #drop-zone {
+        padding: 1.1rem 0.95rem;
+      }
+      .inputs-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .inputs-search {
+        padding: 0.1rem 0.65rem;
+      }
+      #inputs-search {
+        font-size: 0.78rem;
+        padding: 0.05rem 0;
+        line-height: 1.1;
+      }
+      .inputs-filters {
+        justify-content: flex-start;
+      }
     }
   </style>
 </head>
 <body>
-  <main class="container">
-    <header>
-      <h1>Lecteur de prompt ComfyUI</h1>
-      <p>Glisse un PNG genere par ComfyUI pour afficher le prompt positif (Description) et le prompt negatif.</p>
-    </header>
-
-    <section id="upload-section">
-      <div id="drop-zone">
-        <p><strong>Glisser deposer</strong> une image PNG ici</p>
-        <p class="muted">ou clique pour choisir un fichier</p>
-        <input id="file-input" type="file" accept="image/png" style="display:none" />
-      </div>
-    </section>
-
-    <section id="results" style="display:none; margin-top:2rem;">
-      <article>
-        <header>
-          <h2>Resultat</h2>
-          <p id="file-info"></p>
-        </header>
-
-        <div class="meta-grid">
-          <div>
-            <h3>Prompt positif - Description</h3>
-            <p class="muted">Extrait du champ <code>Description</code> dans les metadonnees <code>extra</code>.</p>
-            <pre id="description-text">(aucun champ Description trouve)</pre>
-
-            <h3 style="margin-top:1.5rem;">Prompt negatif complet</h3>
-            <p class="muted">Extrait du noeud <code>NEG</code> dans le chunk <code>prompt</code>.</p>
-            <pre id="negative-text">(aucun prompt negatif trouve)</pre>
-
-            <details style="margin-top:1.5rem;">
-              <summary>Debug - chunk "extra" brut</summary>
-              <pre id="extra-raw"></pre>
-            </details>
-
-            <details style="margin-top:1rem;">
-              <summary>Debug - chunk "prompt" complet</summary>
-              <pre id="prompt-text"></pre>
-            </details>
-
-            <details style="margin-top:1rem;">
-              <summary>Debug - chunk "workflow" complet</summary>
-              <pre id="workflow-text"></pre>
-            </details>
+  <main class="app">
+    <div class="container">
+      <header class="app-header">
+        <div class="hero">
+          <div class="hero-icon">🧬</div>
+          <div class="hero-title">
+            ComfyUI Prompt Reader
           </div>
-
-          <div>
-            <h3>Apercu</h3>
-            <figure>
-              <img id="preview" class="preview" alt="Apercu de l'image" />
-              <figcaption><small class="muted">Image telle que chargee depuis le fichier.</small></figcaption>
-            </figure>
-
-            <details style="margin-top:1.5rem;">
-              <summary>Tous les chunks texte detectes</summary>
-              <pre id="all-text-chunks"></pre>
-            </details>
+          <div class="hero-subtitle">
+            Drop a PNG generated by ComfyUI to recover the positive prompt, the negative prompt, and every <code>inputs.text</code> used in your graph.
+          </div>
+          <div class="hero-tags">
+            <div class="hero-tag">
+              <span>🗂️</span><span>PNG metadata inspector</span>
+            </div>
+            <div class="hero-tag">
+              <span>🧩</span><span>inputs.text explorer</span>
+            </div>
+            <div class="hero-tag">
+              <span>⚡</span><span>Local only, no upload</span>
+            </div>
           </div>
         </div>
-      </article>
+      </header>
 
-      <footer style="margin-top:2rem;">
-        <small class="muted">Tout se fait localement dans ton navigateur, aucun envoi en ligne.</small>
-      </footer>
-    </section>
+      <div class="top-bar">
+        <div class="top-bar-left">
+          <div class="file-pill">
+            <span>📁</span>
+            <span class="label">File:</span>
+            <span class="value" id="file-info">No file loaded yet.</span>
+          </div>
+        </div>
+        <div class="top-bar-right">
+          <button type="button" id="minimal-mode-btn" class="secondary">
+            <span>🧪</span>
+            <span>Minimal mode</span>
+          </button>
+          <button type="button" id="top-reset-btn" class="secondary">
+            <span>🔁</span>
+            <span>Reset prompts</span>
+          </button>
+          <div class="pill">
+            <span>🔒</span>
+            <span>Everything stays in this browser</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="minimal-bar">
+        <div class="minimal-hint">
+          <span>📂</span>
+          <span>Drop a ComfyUI PNG anywhere to update positive and negative prompts and preview.</span>
+        </div>
+        <div class="minimal-actions">
+          <button type="button" id="minimal-reset-btn" class="secondary">
+            <span>🔁</span>
+            <span>Reset prompts</span>
+          </button>
+          <button type="button" id="minimal-exit-btn" class="secondary">
+            <span>🧰</span>
+            <span>Detailed view</span>
+          </button>
+        </div>
+      </div>
+
+      <section id="upload-section" aria-label="Image upload">
+        <div id="drop-zone">
+          <div id="drop-zone-inner">
+            <div id="drop-zone-title">
+              <span class="icon">📂</span>
+              <span>Drop a ComfyUI PNG anywhere on this window</span>
+            </div>
+            <p class="secondary-text">or click here to pick a file</p>
+            <div id="drop-zone-hint">
+              <span>💡 You can also paste an image from your clipboard with <kbd>Ctrl</kbd> + <kbd>V</kbd></span>
+            </div>
+            <input id="file-input" type="file" accept="image/png" multiple style="display:none" />
+          </div>
+        </div>
+      </section>
+
+      <section id="results" style="display:none; margin-top:1.4rem;" aria-label="Extraction results">
+        <div class="layout">
+          <div class="left-column">
+            <div class="card card-positive">
+              <div class="card-header">
+                <div class="card-title">
+                  <span class="icon">🟢</span>
+                  <span>Positive prompt</span>
+                </div>
+                <div class="card-actions">
+                  <button type="button" id="copy-description-btn" class="secondary">
+                    <span>📋</span>
+                    <span>Copy positive</span>
+                  </button>
+                </div>
+              </div>
+              <div class="card-subtitle">
+                Taken from the <code>Description</code> field stored in the <code>extra</code> metadata chunk.
+                If missing, a custom default path can be used.
+              </div>
+              <pre id="description-text">(no Description field found in extra metadata)</pre>
+            </div>
+
+            <div class="card card-negative" style="margin-top:0.85rem;">
+              <div class="card-header">
+                <div class="card-title">
+                  <span class="icon">🔴</span>
+                  <span>Negative prompt</span>
+                </div>
+                <div class="card-actions">
+                  <button type="button" id="copy-negative-btn" class="secondary">
+                    <span>📋</span>
+                    <span>Copy negative</span>
+                  </button>
+                </div>
+              </div>
+              <div class="card-subtitle">
+                Extracted from the node titled <code>NEG</code> (or similar) inside the ComfyUI prompt JSON.
+                If missing, a custom default path can be used.
+              </div>
+              <pre id="negative-text">(no negative prompt found)</pre>
+            </div>
+
+            <div class="card card-inputs" style="margin-top:0.85rem;">
+              <div class="card-header">
+                <div class="card-title">
+                  <span class="icon">🧩</span>
+                  <span>All inputs.text</span>
+                </div>
+                <div class="card-actions">
+                  <button type="button" id="copy-all-inputs-btn" class="secondary">
+                    <span>📋</span>
+                    <span>Copy all</span>
+                  </button>
+                </div>
+              </div>
+              <div class="card-subtitle">
+                Grouped by ComfyUI node, with every <code>inputs.text</code> value found in the <code>prompt</code> chunk.
+                You can set any of them as your default positive or negative path.
+              </div>
+
+              <div class="inputs-toolbar">
+                <div class="inputs-search">
+                  <span class="inputs-search-icon">🔍</span>
+                  <input
+                    type="search"
+                    id="inputs-search"
+                    placeholder="Search in inputs.text..."
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="inputs-filters">
+                  <button
+                    type="button"
+                    class="filter-pill"
+                    data-filter="hide-duplicates"
+                  >
+                    <span class="icon">🧹</span>
+                    <span>Hide duplicates</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="filter-pill"
+                    data-filter="only-long"
+                  >
+                    <span class="icon">📏</span>
+                    <span>Only long texts</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="filter-pill"
+                    data-filter="only-title"
+                  >
+                    <span class="icon">🏷️</span>
+                    <span>Only nodes with title</span>
+                  </button>
+                </div>
+              </div>
+
+              <div id="prompt-text-inputs" class="prompt-text-list"></div>
+            </div>
+          </div>
+
+          <div class="right-column">
+            <div class="card card-preview">
+              <div class="card-header">
+                <div class="card-title">
+                  <span class="icon">🖼️</span>
+                  <span>Image preview</span>
+                </div>
+                <div class="card-actions">
+                  <button type="button" id="export-json-btn" class="secondary">
+                    <span>💾</span>
+                    <span>Export JSON</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="preview-wrapper">
+                <div class="preview-image">
+                  <img id="preview" class="preview" alt="Image preview" />
+                </div>
+                <div class="preview-meta" id="preview-meta">
+                  <span>Loaded image preview from the selected PNG file.</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card card-history">
+              <div class="card-header">
+                <div class="card-title">
+                  <span class="icon">🕒</span>
+                  <span>Recent files</span>
+                </div>
+              </div>
+              <div class="card-subtitle">
+                Last 10 images in this session, with resolution and workflow name when available.
+              </div>
+              <ul id="history-list" class="history-list"></ul>
+            </div>
+
+            <div class="card card-debug" style="margin-top:0.85rem;">
+              <div class="card-header">
+                <div class="card-title">
+                  <span class="icon">🛠</span>
+                  <span>Debug prompt chunk (raw JSON)</span>
+                </div>
+                <div class="card-actions">
+                  <button type="button" id="debug-toggle-btn" class="secondary" style="display:none;">
+                    <span>✖️</span>
+                    <span>Hide JSON</span>
+                  </button>
+                </div>
+              </div>
+              <pre id="prompt-text" style="display:none;"></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="app-footer">
+      <span class="lock">🔐</span>
+      All parsing is done in your browser. Nothing is uploaded anywhere.
+    </footer>
   </main>
+
+  <!-- Full-window drag overlay -->
+  <div id="drop-overlay">
+    <div id="drop-overlay-inner">
+      <div id="drop-overlay-emoji">📥</div>
+      <div id="drop-overlay-title">Drop your ComfyUI PNG here</div>
+      <div id="drop-overlay-text">
+        The whole window is a drop zone. Release to inspect metadata and prompts.
+      </div>
+    </div>
+  </div>
+
+  <div id="toast">
+    <span id="toast-icon">✨</span>
+    <span id="toast-text"></span>
+  </div>
 
   <script>
     const dropZone = document.getElementById("drop-zone");
@@ -127,27 +1302,313 @@
     const resultsSection = document.getElementById("results");
     const fileInfo = document.getElementById("file-info");
     const previewImg = document.getElementById("preview");
+    const previewMetaEl = document.getElementById("preview-meta");
 
     const descriptionText = document.getElementById("description-text");
     const negativeText = document.getElementById("negative-text");
-    const extraRaw = document.getElementById("extra-raw");
     const promptText = document.getElementById("prompt-text");
-    const workflowText = document.getElementById("workflow-text");
-    const allTextChunks = document.getElementById("all-text-chunks");
+    const promptTextInputs = document.getElementById("prompt-text-inputs");
+
+    const minimalModeBtn = document.getElementById("minimal-mode-btn");
+    const minimalResetBtn = document.getElementById("minimal-reset-btn");
+    const minimalExitBtn = document.getElementById("minimal-exit-btn");
+    const topResetBtn = document.getElementById("top-reset-btn");
+
+    const copyDescriptionBtn = document.getElementById("copy-description-btn");
+    const copyNegativeBtn = document.getElementById("copy-negative-btn");
+    const copyAllInputsBtn = document.getElementById("copy-all-inputs-btn");
+    const exportJsonBtn = document.getElementById("export-json-btn");
+    const debugToggleBtn = document.getElementById("debug-toggle-btn");
+    const debugCard = document.querySelector(".card-debug");
+
+    const positiveCard = document.querySelector(".card-positive");
+    const negativeCard = document.querySelector(".card-negative");
+
+    const toastEl = document.getElementById("toast");
+    const toastIconEl = document.getElementById("toast-icon");
+    const toastTextEl = document.getElementById("toast-text");
+    let toastTimer = null;
+
+    const faviconEl = document.getElementById("favicon");
+
+    const historyListEl = document.getElementById("history-list");
+    let recentFiles = [];
+    let selectedHistoryId = null;
+
+    const dropOverlay = document.getElementById("drop-overlay");
 
     const latin1Decoder = new TextDecoder("latin1");
     const utf8Decoder = new TextDecoder("utf-8");
+
+    const LS_POS_SELECTOR = "comfyPromptReaderPosSelector";
+    const LS_NEG_SELECTOR = "comfyPromptReaderNegSelector";
+
+    const defaultFavicon = faviconEl ? faviconEl.href : "";
+    const loadedFavicon =
+      "data:image/svg+xml," +
+      encodeURIComponent(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' ry='14' fill='#1d4ed8'/><text y='52%' x='50%' dominant-baseline='middle' text-anchor='middle' font-size='38'>🧩</text></svg>"
+      );
+
+    let lastParsedMeta = null;
+
+    const LONG_TEXT_MIN_CHARS = 80;
+    const inputsSearchEl = document.getElementById("inputs-search");
+    const filterButtons = document.querySelectorAll(".filter-pill[data-filter]");
+
+    const filterState = {
+      search: "",
+      hideDuplicates: false,
+      onlyLong: false,
+      onlyWithTitle: false
+    };
+
+    let currentImageWidth = 0;
+    let currentImageHeight = 0;
+    let pendingHistory = null;
+
+    let dragDepth = 0;
+
+    function showToast(message, type = "neutral") {
+      if (!toastEl || !toastTextEl || !toastIconEl) return;
+
+      let icon = "✨";
+      if (type === "positive") icon = "🟢";
+      else if (type === "negative") icon = "🔴";
+      else if (type === "neutral") icon = "📋";
+
+      toastTextEl.textContent = message;
+      toastIconEl.textContent = icon;
+
+      toastEl.className = "toast";
+      toastEl.classList.remove("toast-positive", "toast-negative", "toast-neutral", "show");
+
+      if (type === "positive") toastEl.classList.add("toast-positive");
+      else if (type === "negative") toastEl.classList.add("toast-negative");
+      else toastEl.classList.add("toast-neutral");
+
+      void toastEl.offsetWidth;
+      toastEl.classList.add("show");
+
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toastEl.classList.remove("show");
+      }, 2100);
+    }
+
+    function makeFileId(file) {
+      return [file.name || "", file.size || 0, file.lastModified || 0].join("|");
+    }
+
+    function addToHistory(file, previewUrl, width, height, workflowName) {
+      if (!lastParsedMeta || !file || !historyListEl) return;
+
+      const id = makeFileId(file);
+      const size = file.size || 0;
+
+      const existingIndex = recentFiles.findIndex((f) => f.id === id);
+      if (existingIndex >= 0) {
+        const existing = recentFiles[existingIndex];
+        recentFiles[existingIndex] = {
+          ...existing,
+          size,
+          previewUrl: previewUrl || existing.previewUrl,
+          width: width || existing.width || 0,
+          height: height || existing.height || 0,
+          workflowName: workflowName || existing.workflowName || ""
+        };
+      } else {
+        const snapshot = JSON.parse(JSON.stringify(lastParsedMeta));
+        recentFiles.unshift({
+          id,
+          name: file.name || "Unknown file",
+          size,
+          previewUrl: previewUrl || "",
+          width: width || 0,
+          height: height || 0,
+          workflowName: workflowName || "",
+          meta: snapshot
+        });
+        if (recentFiles.length > 10) {
+          recentFiles.pop();
+        }
+      }
+
+      selectedHistoryId = id;
+      renderHistory();
+    }
+
+    function renderHistory() {
+      if (!historyListEl) return;
+      historyListEl.innerHTML = "";
+
+      if (!recentFiles.length) {
+        const li = document.createElement("li");
+        li.className = "history-empty";
+        li.textContent = "(no files in this session yet)";
+        historyListEl.appendChild(li);
+        return;
+      }
+
+      recentFiles.forEach((entry) => {
+        const li = document.createElement("li");
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "history-item-btn";
+        if (entry.id === selectedHistoryId) {
+          btn.classList.add("selected");
+        }
+
+        btn.addEventListener("click", () => {
+          selectedHistoryId = entry.id;
+          loadFromHistory(entry.id);
+          renderHistory();
+        });
+
+        const thumbWrap = document.createElement("div");
+        thumbWrap.className = "history-thumb-wrap";
+
+        if (entry.previewUrl) {
+          const img = document.createElement("img");
+          img.className = "history-thumb";
+          img.src = entry.previewUrl;
+          img.alt = entry.name || "history image";
+          thumbWrap.appendChild(img);
+        }
+
+        const main = document.createElement("div");
+        main.className = "history-item-main";
+
+        const nameEl = document.createElement("div");
+        nameEl.className = "history-item-name";
+        nameEl.textContent = entry.name;
+
+        const metaEl = document.createElement("div");
+        metaEl.className = "history-item-meta";
+        const sizeKb = (entry.size / 1024).toFixed(1);
+        const parts = [`${sizeKb} KB`];
+        if (entry.width && entry.height) {
+          parts.push(`${entry.width}×${entry.height}px`);
+        }
+        if (entry.workflowName) {
+          parts.push(entry.workflowName);
+        }
+        metaEl.textContent = parts.join(" • ");
+
+        main.appendChild(nameEl);
+        main.appendChild(metaEl);
+
+        btn.appendChild(thumbWrap);
+        btn.appendChild(main);
+        li.appendChild(btn);
+        historyListEl.appendChild(li);
+      });
+    }
+
+    function loadFromHistory(id) {
+      const entryIndex = recentFiles.findIndex((e) => e.id === id);
+      if (entryIndex < 0) return;
+
+      const entry = recentFiles[entryIndex];
+
+      try {
+        lastParsedMeta = JSON.parse(JSON.stringify(entry.meta));
+      } catch (e) {
+        console.warn("Could not restore meta from history", e);
+        return;
+      }
+
+      const baseDesc = lastParsedMeta.baseDescription || "";
+      const baseNeg = lastParsedMeta.baseNegative || "";
+
+      const desc =
+        lastParsedMeta.description && lastParsedMeta.description.trim().length
+          ? lastParsedMeta.description
+          : baseDesc;
+      const neg =
+        lastParsedMeta.negative && lastParsedMeta.negative.trim().length
+          ? lastParsedMeta.negative
+          : baseNeg;
+
+      descriptionText.textContent =
+        desc || "(no Description field found in extra metadata)";
+      negativeText.textContent =
+        neg || "(no negative prompt found)";
+
+      promptText.textContent = lastParsedMeta.prompt || "(no prompt chunk found)";
+
+      if (entry.previewUrl) {
+        previewImg.src = entry.previewUrl;
+      }
+
+      const sizeKb = (entry.size / 1024).toFixed(1);
+      const parts = [`${entry.name} (${sizeKb} KB`];
+      if (entry.width && entry.height) {
+        parts.push(` - ${entry.width}×${entry.height}px`);
+      }
+      const label = parts.join("") + ")";
+      if (previewMetaEl) {
+        previewMetaEl.textContent = label;
+      }
+
+      fileInfo.textContent = `${entry.name} (${sizeKb} KB)`;
+      resultsSection.style.display = "block";
+
+      currentImageWidth = entry.width || 0;
+      currentImageHeight = entry.height || 0;
+
+      applyFiltersAndRender();
+      showToast("History file loaded", "neutral");
+    }
+
+    function updatePreviewMeta(file) {
+      if (!previewMetaEl || !file) return;
+      const sizeKb = (file.size / 1024).toFixed(1);
+      let text = `${file.name} (${sizeKb} KB`;
+      if (currentImageWidth && currentImageHeight) {
+        text += ` - ${currentImageWidth}×${currentImageHeight}px`;
+      }
+      text += ")";
+      previewMetaEl.textContent = text;
+    }
+
+    function maybeFinalizeHistory() {
+      if (!pendingHistory || !lastParsedMeta) return;
+      const { file, previewUrl } = pendingHistory;
+      addToHistory(file, previewUrl, currentImageWidth, currentImageHeight, lastParsedMeta.workflowName || "");
+      pendingHistory = null;
+    }
 
     function handleFiles(files) {
       if (!files || !files.length) return;
       const file = files[0];
 
       if (file.type && file.type !== "image/png") {
-        alert("Ce fichier ne semble pas etre un PNG. Je tente quand meme.");
+        alert("This file does not look like a PNG. I will still try to read it.");
       }
 
-      fileInfo.textContent = `Fichier: ${file.name} (${(file.size / 1024).toFixed(1)} Ko)`;
-      previewImg.src = URL.createObjectURL(file);
+      fileInfo.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      const objectUrl = URL.createObjectURL(file);
+      currentImageWidth = 0;
+      currentImageHeight = 0;
+      pendingHistory = { file, previewUrl: objectUrl };
+
+      previewImg.onload = function () {
+        currentImageWidth = this.naturalWidth || 0;
+        currentImageHeight = this.naturalHeight || 0;
+        updatePreviewMeta(file);
+        maybeFinalizeHistory();
+      };
+      previewImg.src = objectUrl;
+
+      try {
+        if (faviconEl && loadedFavicon) {
+          faviconEl.href = loadedFavicon;
+        }
+      } catch (e) {
+        console.warn("Could not update favicon", e);
+      }
 
       const reader = new FileReader();
       reader.onload = function (e) {
@@ -156,9 +1617,10 @@
           const textChunks = extractPngTextChunks(buffer);
           showMetadata(textChunks);
           resultsSection.style.display = "block";
+          maybeFinalizeHistory();
         } catch (err) {
           console.error(err);
-          alert("Erreur pendant la lecture des metadonnees PNG.");
+          alert("Error while reading PNG metadata. Check the browser console for details.");
         }
       };
       reader.readAsArrayBuffer(file);
@@ -166,23 +1628,22 @@
 
     function extractPngTextChunks(arrayBuffer) {
       const dataView = new DataView(arrayBuffer);
-      const bytes = new Uint8Array(arrayBuffer);
+      let pos = 0;
 
-      const sig = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-      for (let i = 0; i < sig.length; i++) {
-        if (bytes[i] !== sig[i]) {
-          throw new Error("Ce fichier ne semble pas etre un PNG valide.");
+      const signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+      for (let i = 0; i < signature.length; i++) {
+        if (dataView.getUint8(i) !== signature[i]) {
+          throw new Error("This file does not seem to be a valid PNG.");
         }
       }
+      pos += 8;
 
-      let pos = 8;
       const textChunks = [];
 
       while (pos + 8 <= dataView.byteLength) {
         const length = dataView.getUint32(pos);
         pos += 4;
 
-        if (pos + 4 > dataView.byteLength) break;
         let type = "";
         for (let i = 0; i < 4; i++) {
           type += String.fromCharCode(dataView.getUint8(pos + i));
@@ -192,7 +1653,7 @@
         if (pos + length + 4 > dataView.byteLength) break;
         const chunkData = new Uint8Array(arrayBuffer, pos, length);
         pos += length;
-        pos += 4; // CRC
+        pos += 4;
 
         if (type === "tEXt") {
           const sep = chunkData.indexOf(0);
@@ -207,12 +1668,20 @@
             const keyword = latin1Decoder.decode(chunkData.slice(0, sep));
             const compressionMethod = chunkData[sep + 1];
             const compressed = chunkData.slice(sep + 2);
-            try {
-              const decompressed = pako.inflate(compressed);
-              const text = latin1Decoder.decode(decompressed);
-              textChunks.push({ type, keyword, text, compressionMethod });
-            } catch (e) {
-              console.warn("Echec decompression zTXt", e);
+            let text = "";
+            if (compressionMethod === 0 && typeof pako !== "undefined") {
+              try {
+                const decompressed = pako.inflate(compressed);
+                text = latin1Decoder.decode(decompressed);
+              } catch (e) {
+                console.warn("Failed to decompress zTXt", e);
+              }
+            } else if (compressionMethod === 0) {
+              console.warn("zTXt compressed chunk present, but pako is not available.");
+              text = "[zTXt compressed text not decompressed, pako missing]";
+            }
+            if (text) {
+              textChunks.push({ type, keyword, text });
             }
           }
         } else if (type === "iTXt") {
@@ -230,78 +1699,89 @@
           const keyword = readNullTerminated(latin1Decoder);
           const compressionFlag = chunkData[offset++];
           const compressionMethod = chunkData[offset++];
-          const languageTag = readNullTerminated(latin1Decoder);
-          const translatedKeyword = readNullTerminated(utf8Decoder);
-          let textBytes = chunkData.slice(offset);
+          readNullTerminated(latin1Decoder);
+          readNullTerminated(latin1Decoder);
 
-          if (compressionFlag === 1) {
-            try {
-              textBytes = pako.inflate(textBytes);
-            } catch (e) {
-              console.warn("Echec decompression iTXt", e);
+          let text;
+          if (compressionFlag === 0) {
+            text = utf8Decoder.decode(chunkData.slice(offset));
+          } else if (compressionFlag === 1 && compressionMethod === 0) {
+            if (typeof pako !== "undefined") {
+              try {
+                const decompressed = pako.inflate(chunkData.slice(offset));
+                text = utf8Decoder.decode(decompressed);
+              } catch (e) {
+                console.warn("Failed to decompress compressed iTXt", e);
+              }
+            } else {
+              console.warn("Compressed iTXt present, but pako is not available.");
+              text = "[iTXt compressed text not decompressed, pako missing]";
             }
           }
-          const text = utf8Decoder.decode(textBytes);
 
-          textChunks.push({
-            type,
-            keyword,
-            text,
-            compressionFlag,
-            compressionMethod,
-            languageTag,
-            translatedKeyword,
-          });
+          if (typeof text === "string") {
+            textChunks.push({ type, keyword, text });
+          }
         }
+
+        if (type === "IEND") break;
       }
 
       return textChunks;
     }
 
     function safeJsonParse(str) {
+      if (!str) return null;
+
+      let cleaned = str;
+      cleaned = cleaned.replace(/:\s*NaN\b/g, ": 0");
+      cleaned = cleaned.replace(/:\s*Infinity\b/g, ": 0");
+      cleaned = cleaned.replace(/:\s*-Infinity\b/g, ": 0");
+      cleaned = cleaned.replace(/:\s*undefined\b/g, ": 0");
+
       try {
-        return JSON.parse(str);
-      } catch {
+        return JSON.parse(cleaned);
+      } catch (e) {
+        console.warn("Invalid JSON even after cleaning", e);
         return null;
       }
     }
 
     function extractDescriptionFromExtra(extraChunk) {
       if (!extraChunk || !extraChunk.text) return null;
-      const raw = extraChunk.text.trim();
+      const txt = extraChunk.text;
 
-      const parsed = safeJsonParse(raw);
-      let containerStr;
-
-      if (parsed && typeof parsed === "object" && typeof parsed.Description === "string") {
-        return parsed.Description;
-      }
-
-      if (typeof parsed === "string") {
-        containerStr = parsed;
+      let obj = null;
+      if (txt.trim().startsWith("{")) {
+        obj = safeJsonParse(txt);
       } else {
-        containerStr = raw;
+        try {
+          const normalized = txt
+            .replace(/\\"/g, '"')
+            .replace(/"{/g, "{")
+            .replace(/}"/g, "}");
+          if (normalized.trim().startsWith("{")) {
+            obj = safeJsonParse(normalized);
+          }
+        } catch (e) {
+          console.warn("Could not parse extra chunk as JSON", e);
+        }
       }
-
-      const match = containerStr.match(/"Description"\s*:\s*"([\s\S]*?)"/);
-      if (!match) return null;
-
-      let desc = match[1];
-      desc = desc
-        .replace(/\\"/g, '"')
-        .replace(/\\n/g, "\n")
-        .replace(/\\\\/g, "\\");
-
-      return desc;
-    }
-
-    function extractNegativePromptFromPromptChunk(promptChunk) {
-      if (!promptChunk || !promptChunk.text) return null;
-
-      const obj = safeJsonParse(promptChunk.text);
       if (!obj || typeof obj !== "object") return null;
 
-      const nodes = Object.values(obj);
+      if (typeof obj.Description === "string") {
+        return obj.Description;
+      }
+      if (typeof obj.description === "string") {
+        return obj.description;
+      }
+      return null;
+    }
+
+    function extractNegativeFromObject(promptObj) {
+      if (!promptObj || typeof promptObj !== "object") return null;
+
+      const nodes = Object.values(promptObj);
       const candidates = [];
 
       for (const node of nodes) {
@@ -325,66 +1805,750 @@
         return unique.join("\n\n");
       }
 
-      // Fallback - on prend le plus long texte parmi les inputs.text
       const allText = [];
       for (const node of nodes) {
         if (!node || typeof node !== "object") continue;
         const txt = node.inputs && typeof node.inputs.text === "string"
           ? node.inputs.text
           : null;
-        if (txt) allText.push(txt);
+        if (txt) {
+          allText.push(txt);
+        }
       }
       if (!allText.length) return null;
+
       allText.sort((a, b) => b.length - a.length);
       return allText[0];
     }
 
-    function showMetadata(textChunks) {
-      allTextChunks.textContent = textChunks
-        .map((c, idx) => `#${idx + 1} [${c.type}] keyword="${c.keyword}"\n${c.text}\n`)
-        .join("\n-----------------------------\n");
+    function normalizePromptText(text) {
+      if (!text) return "";
+      const lines = text
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(l => l.length > 0);
+      return lines.join(" ");
+    }
 
+    function extractInputsEntriesFromObject(promptObj) {
+      if (!promptObj || typeof promptObj !== "object") return [];
+      const entries = [];
+
+      for (const [nodeId, node] of Object.entries(promptObj)) {
+        if (!node || typeof node !== "object") continue;
+        const title = node._meta && typeof node._meta.title === "string" ? node._meta.title : "";
+        const classType = typeof node.class_type === "string" ? node.class_type : "";
+        const inputs = node.inputs;
+        if (!inputs || typeof inputs !== "object") continue;
+
+        for (const [key, val] of Object.entries(inputs)) {
+          if (typeof val === "string" && /text/i.test(key)) {
+            const normalized = normalizePromptText(val);
+            if (!normalized || normalized.trim().length === 0) continue;
+
+            entries.push({
+              nodeId,
+              title,
+              class_type: classType,
+              inputKey: key,
+              text: val
+            });
+          }
+        }
+      }
+
+      return entries;
+    }
+
+    function loadSelector(key) {
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        return JSON.parse(raw);
+      } catch (e) {
+        console.warn("Could not load selector", e);
+        return null;
+      }
+    }
+
+    function saveSelector(key, selector) {
+      try {
+        localStorage.setItem(key, JSON.stringify(selector));
+      } catch (e) {
+        console.warn("Could not save selector", e);
+      }
+    }
+
+    function getTextFromSelector(promptObj, selector) {
+      if (!promptObj || !selector) return null;
+
+      const nodeId = selector.nodeId;
+      const inputKey = selector.inputKey;
+      const title = selector.title || "";
+      const classType = selector.class_type || "";
+
+      if (nodeId && inputKey && promptObj[nodeId]) {
+        const node = promptObj[nodeId];
+        if (node && node.inputs && typeof node.inputs[inputKey] === "string") {
+          return node.inputs[inputKey];
+        }
+      }
+
+      if (title && classType && inputKey) {
+        for (const node of Object.values(promptObj)) {
+          if (!node || typeof node !== "object") continue;
+          const nodeTitle = node._meta && typeof node._meta.title === "string" ? node._meta.title : "";
+          const nodeClass = typeof node.class_type === "string" ? node.class_type : "";
+          if (nodeTitle === title && nodeClass === classType) {
+            if (node.inputs && typeof node.inputs[inputKey] === "string") {
+              return node.inputs[inputKey];
+            }
+          }
+        }
+      }
+
+      return null;
+    }
+
+    function showMetadata(textChunks) {
       const extraChunk = textChunks.find(c => c.keyword === "extra");
       const promptChunk = textChunks.find(c => c.keyword === "prompt");
       const workflowChunk = textChunks.find(c => c.keyword === "workflow");
 
-      extraRaw.textContent = extraChunk ? extraChunk.text : "(aucun chunk extra)";
+      let promptObj = null;
+      if (promptChunk && promptChunk.text) {
+        promptObj = safeJsonParse(promptChunk.text);
+      }
 
-      const desc = extractDescriptionFromExtra(extraChunk);
-      descriptionText.textContent = desc || "(aucun champ Description trouve dans extra)";
+      let workflowName = null;
+      if (workflowChunk && workflowChunk.text) {
+        const wfObj = safeJsonParse(workflowChunk.text);
+        if (wfObj && typeof wfObj === "object") {
+          if (typeof wfObj.name === "string") workflowName = wfObj.name;
+          else if (typeof wfObj.title === "string") workflowName = wfObj.title;
+        }
+      }
 
-      const neg = extractNegativePromptFromPromptChunk(promptChunk);
-      negativeText.textContent = neg || "(aucun prompt negatif trouve)";
+      const baseDesc = extractDescriptionFromExtra(extraChunk);
+      const baseNeg = extractNegativeFromObject(promptObj);
 
-      promptText.textContent = promptChunk ? promptChunk.text : "(aucun chunk prompt)";
-      workflowText.textContent = workflowChunk ? workflowChunk.text : "(aucun chunk workflow)";
+      let desc = baseDesc;
+      let neg = baseNeg;
+
+      const posSelector = loadSelector(LS_POS_SELECTOR);
+      const negSelector = loadSelector(LS_NEG_SELECTOR);
+
+      if (!desc && promptObj && posSelector) {
+        const selText = getTextFromSelector(promptObj, posSelector);
+        if (selText) {
+          desc = selText;
+        }
+      }
+
+      if (!neg && promptObj && negSelector) {
+        const selText = getTextFromSelector(promptObj, negSelector);
+        if (selText) {
+          neg = selText;
+        }
+      }
+
+      descriptionText.textContent = desc || "(no Description field found in extra metadata)";
+      negativeText.textContent = neg || "(no negative prompt found)";
+
+      promptText.textContent = promptChunk ? promptChunk.text : "(no prompt chunk found)";
+
+      const inputsEntries = extractInputsEntriesFromObject(promptObj);
+
+      lastParsedMeta = {
+        baseDescription: baseDesc || "",
+        baseNegative: baseNeg || "",
+        description: descriptionText.textContent,
+        negative: negativeText.textContent,
+        extra: extraChunk ? extraChunk.text : "",
+        prompt: promptChunk ? promptChunk.text : "",
+        workflow: workflowChunk ? workflowChunk.text : "",
+        workflowName: workflowName || "",
+        chunks: textChunks,
+        inputsEntries: inputsEntries,
+        posSelector,
+        negSelector
+      };
+
+      applyFiltersAndRender();
     }
 
-    // Drag and drop
+    function isSelectorMatch(entry, selector) {
+      if (!selector) return false;
+      if (
+        selector.nodeId &&
+        selector.inputKey &&
+        entry.nodeId === selector.nodeId &&
+        entry.inputKey === selector.inputKey
+      ) {
+        return true;
+      }
+      if (
+        selector.title &&
+        selector.class_type &&
+        selector.inputKey &&
+        entry.title === selector.title &&
+        entry.class_type === selector.class_type &&
+        entry.inputKey === selector.inputKey
+      ) {
+        return true;
+      }
+      return false;
+    }
+
+    function buildNodesFromEntries(entries, posSelector, negSelector) {
+      const byNode = new Map();
+      for (const entry of entries) {
+        let node = byNode.get(entry.nodeId);
+        if (!node) {
+          node = {
+            nodeId: entry.nodeId,
+            title: entry.title || "",
+            class_type: entry.class_type || "",
+            entries: [],
+            hasPositiveSource: false,
+            hasNegativeSource: false
+          };
+          byNode.set(entry.nodeId, node);
+        }
+
+        const isPos = isSelectorMatch(entry, posSelector);
+        const isNeg = isSelectorMatch(entry, negSelector);
+        entry.isPositiveSource = isPos;
+        entry.isNegativeSource = isNeg;
+        if (isPos) node.hasPositiveSource = true;
+        if (isNeg) node.hasNegativeSource = true;
+
+        node.entries.push(entry);
+      }
+
+      const nodes = Array.from(byNode.values());
+      nodes.sort((a, b) => {
+        const aImportant = (a.hasPositiveSource || a.hasNegativeSource) ? 0 : 1;
+        const bImportant = (b.hasPositiveSource || b.hasNegativeSource) ? 0 : 1;
+        if (aImportant !== bImportant) return aImportant - bImportant;
+
+        const at = (a.title || "").toLowerCase();
+        const bt = (b.title || "").toLowerCase();
+        if (at && bt && at !== bt) return at < bt ? -1 : 1;
+
+        return (a.nodeId || "").localeCompare(b.nodeId || "");
+      });
+
+      return nodes;
+    }
+
+    function renderInputsTextList(entries, posSelector, negSelector) {
+      promptTextInputs.innerHTML = "";
+      if (!entries || !entries.length) {
+        const empty = document.createElement("div");
+        empty.textContent = "(no inputs.text values match current filters)";
+        promptTextInputs.appendChild(empty);
+        return;
+      }
+
+      const nodes = buildNodesFromEntries(entries, posSelector, negSelector);
+
+      nodes.forEach((node) => {
+        if (!node.entries || node.entries.length === 0) return;
+
+        const nodeEl = document.createElement("div");
+        nodeEl.className = "inputs-node";
+
+        const header = document.createElement("div");
+        header.className = "inputs-node-header";
+
+        const main = document.createElement("div");
+        main.className = "inputs-node-main";
+
+        const titleEl = document.createElement("div");
+        titleEl.className = "inputs-node-title";
+        titleEl.textContent = node.title || `Node #${node.nodeId}`;
+
+        const metaEl = document.createElement("div");
+        metaEl.className = "inputs-node-meta";
+        metaEl.textContent = node.class_type || "Unknown class";
+
+        main.appendChild(titleEl);
+        main.appendChild(metaEl);
+
+        const badges = document.createElement("div");
+        badges.className = "inputs-node-badges";
+
+        if (node.hasPositiveSource) {
+          const badgePos = document.createElement("div");
+          badgePos.className = "node-badge positive";
+          badgePos.innerHTML = "<span>🟢</span><span>Using as Positive</span>";
+          badges.appendChild(badgePos);
+        }
+        if (node.hasNegativeSource) {
+          const badgeNeg = document.createElement("div");
+          badgeNeg.className = "node-badge negative";
+          badgeNeg.innerHTML = "<span>🔴</span><span>Using as Negative</span>";
+          badges.appendChild(badgeNeg);
+        }
+
+        header.appendChild(main);
+        if (badges.childNodes.length > 0) {
+          header.appendChild(badges);
+        }
+
+        const body = document.createElement("div");
+        body.className = "inputs-node-body";
+
+        node.entries.forEach((entry) => {
+          const displayText = normalizePromptText(entry.text);
+          if (!displayText || displayText.trim().length === 0) {
+            return;
+          }
+          const originalText = entry.text;
+
+          const item = document.createElement("div");
+          item.className = "prompt-text-item";
+
+          if (entry.isPositiveSource) {
+            item.classList.add("entry-positive-source");
+          }
+          if (entry.isNegativeSource) {
+            item.classList.add("entry-negative-source");
+          }
+
+          const keyLabel = document.createElement("div");
+          keyLabel.className = "inputs-entry-key";
+          keyLabel.textContent = entry.inputKey || "text";
+
+          const spanText = document.createElement("span");
+          spanText.textContent = displayText;
+
+          const chipBar = document.createElement("div");
+          chipBar.className = "chip-bar";
+
+          const copyBtn = document.createElement("button");
+          copyBtn.type = "button";
+          copyBtn.className = "chip-btn copy";
+          copyBtn.innerHTML = "<span>📋</span><span>Copy</span>";
+          copyBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            copyToClipboardWithToast(originalText, "Text block copied", "neutral");
+          });
+
+          const posBtn = document.createElement("button");
+          posBtn.type = "button";
+          posBtn.className = "chip-btn pos";
+          posBtn.innerHTML = "<span>➕</span><span>Set +</span>";
+          posBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            setDefaultPositive(entry);
+            showToast("Default positive path updated", "positive");
+            applyFiltersAndRender();
+          });
+
+          const negBtn = document.createElement("button");
+          negBtn.type = "button";
+          negBtn.className = "chip-btn neg";
+          negBtn.innerHTML = "<span>➖</span><span>Set -</span>";
+          negBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            setDefaultNegative(entry);
+            showToast("Default negative path updated", "negative");
+            applyFiltersAndRender();
+          });
+
+          chipBar.appendChild(copyBtn);
+          chipBar.appendChild(posBtn);
+          chipBar.appendChild(negBtn);
+
+          item.appendChild(keyLabel);
+          item.appendChild(spanText);
+          item.appendChild(chipBar);
+
+          body.appendChild(item);
+        });
+
+        if (body.childNodes.length === 0) {
+          return;
+        }
+
+        nodeEl.appendChild(header);
+        nodeEl.appendChild(body);
+        promptTextInputs.appendChild(nodeEl);
+      });
+
+      if (!promptTextInputs.hasChildNodes()) {
+        const empty = document.createElement("div");
+        empty.textContent = "(no inputs.text values match current filters)";
+        promptTextInputs.appendChild(empty);
+      }
+    }
+
+    function setDefaultPositive(entry) {
+      const text = entry.text;
+      descriptionText.textContent = text;
+      const selector = {
+        nodeId: entry.nodeId,
+        inputKey: entry.inputKey,
+        title: entry.title || "",
+        class_type: entry.class_type || ""
+      };
+      saveSelector(LS_POS_SELECTOR, selector);
+      if (lastParsedMeta) {
+        lastParsedMeta.description = text;
+        lastParsedMeta.posSelector = selector;
+      }
+    }
+
+    function setDefaultNegative(entry) {
+      const text = entry.text;
+      negativeText.textContent = text;
+      const selector = {
+        nodeId: entry.nodeId,
+        inputKey: entry.inputKey,
+        title: entry.title || "",
+        class_type: entry.class_type || ""
+      };
+      saveSelector(LS_NEG_SELECTOR, selector);
+      if (lastParsedMeta) {
+        lastParsedMeta.negative = text;
+        lastParsedMeta.negSelector = selector;
+      }
+    }
+
+    function resetDefaults() {
+      try {
+        localStorage.removeItem(LS_POS_SELECTOR);
+        localStorage.removeItem(LS_NEG_SELECTOR);
+      } catch (e) {
+        console.warn("Could not clear stored selectors", e);
+      }
+
+      if (!lastParsedMeta) {
+        descriptionText.textContent = "(no Description field found in extra metadata)";
+        negativeText.textContent = "(no negative prompt found)";
+        return;
+      }
+
+      const baseDesc = lastParsedMeta.baseDescription;
+      const baseNeg = lastParsedMeta.baseNegative;
+
+      descriptionText.textContent = baseDesc || "(no Description field found in extra metadata)";
+      negativeText.textContent = baseNeg || "(no negative prompt found)";
+
+      lastParsedMeta.description = descriptionText.textContent;
+      lastParsedMeta.negative = negativeText.textContent;
+      lastParsedMeta.posSelector = null;
+      lastParsedMeta.negSelector = null;
+
+      showToast("Prompts reset to original metadata", "neutral");
+      applyFiltersAndRender();
+    }
+
+    function applyFiltersAndRender() {
+      if (!lastParsedMeta || !Array.isArray(lastParsedMeta.inputsEntries)) {
+        promptTextInputs.innerHTML = "";
+        const empty = document.createElement("div");
+        empty.textContent = "(no inputs.text values found in prompt chunk)";
+        promptTextInputs.appendChild(empty);
+        return;
+      }
+
+      let entries = [...lastParsedMeta.inputsEntries];
+
+      if (filterState.search && filterState.search.trim().length > 0) {
+        const term = filterState.search.trim().toLowerCase();
+        entries = entries.filter((entry) => {
+          const textNorm = normalizePromptText(entry.text).toLowerCase();
+          return textNorm.includes(term);
+        });
+      }
+
+      if (filterState.onlyLong) {
+        entries = entries.filter((entry) => {
+          const textNorm = normalizePromptText(entry.text);
+          return textNorm.length >= LONG_TEXT_MIN_CHARS;
+        });
+      }
+
+      if (filterState.onlyWithTitle) {
+        entries = entries.filter((entry) => entry.title && entry.title.trim().length > 0);
+      }
+
+      if (filterState.hideDuplicates) {
+        const seen = new Set();
+        const uniqueEntries = [];
+        for (const entry of entries) {
+          const norm = normalizePromptText(entry.text).toLowerCase();
+          if (!seen.has(norm)) {
+            seen.add(norm);
+            uniqueEntries.push(entry);
+          }
+        }
+        entries = uniqueEntries;
+      }
+
+      const posSel = lastParsedMeta.posSelector || loadSelector(LS_POS_SELECTOR);
+      const negSel = lastParsedMeta.negSelector || loadSelector(LS_NEG_SELECTOR);
+
+      renderInputsTextList(entries, posSel, negSel);
+    }
+
     dropZone.addEventListener("click", () => fileInput.click());
 
-    dropZone.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    function addDragOverClass() {
       dropZone.classList.add("dragover");
-    });
+    }
+    function removeDragOverClass() {
+      dropZone.classList.remove("dragover");
+    }
 
-    dropZone.addEventListener("dragleave", (e) => {
+    function showOverlay() {
+      if (dropOverlay) {
+        dropOverlay.style.display = "flex";
+      }
+    }
+    function hideOverlay() {
+      if (dropOverlay) {
+        dropOverlay.style.display = "none";
+      }
+    }
+
+    window.addEventListener("dragenter", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      dropZone.classList.remove("dragover");
+      dragDepth++;
+      addDragOverClass();
+      showOverlay();
     });
 
-    dropZone.addEventListener("drop", (e) => {
+    window.addEventListener("dragover", (e) => {
       e.preventDefault();
       e.stopPropagation();
-      dropZone.classList.remove("dragover");
-      handleFiles(e.dataTransfer.files);
+      addDragOverClass();
+      showOverlay();
+    });
+
+    window.addEventListener("dragleave", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragDepth--;
+      if (dragDepth <= 0) {
+        dragDepth = 0;
+        hideOverlay();
+        removeDragOverClass();
+      }
+    });
+
+    window.addEventListener("drop", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragDepth = 0;
+      hideOverlay();
+      removeDragOverClass();
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+        handleFiles(e.dataTransfer.files);
+      }
     });
 
     fileInput.addEventListener("change", (e) => {
       handleFiles(e.target.files);
     });
+
+    if (minimalModeBtn) {
+      minimalModeBtn.addEventListener("click", () => {
+        const isMinimal = document.body.classList.toggle("minimal-mode");
+        if (isMinimal) {
+          minimalModeBtn.classList.add("minimal-toggle-active");
+          showToast("Minimal mode, image and prompts only", "neutral");
+        } else {
+          minimalModeBtn.classList.remove("minimal-toggle-active");
+        }
+      });
+    }
+
+    if (minimalExitBtn) {
+      minimalExitBtn.addEventListener("click", () => {
+        document.body.classList.remove("minimal-mode");
+        if (minimalModeBtn) {
+          minimalModeBtn.classList.remove("minimal-toggle-active");
+        }
+      });
+    }
+
+    if (minimalResetBtn) {
+      minimalResetBtn.addEventListener("click", () => {
+        resetDefaults();
+      });
+    }
+
+    if (topResetBtn) {
+      topResetBtn.addEventListener("click", () => {
+        resetDefaults();
+      });
+    }
+
+    if (debugCard && debugToggleBtn && promptText) {
+      debugCard.addEventListener("click", (e) => {
+        if (promptText.style.display === "block") return;
+        if (debugToggleBtn.contains(e.target)) return;
+        promptText.style.display = "block";
+        debugToggleBtn.style.display = "inline-flex";
+      });
+
+      debugToggleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        promptText.style.display = "none";
+        debugToggleBtn.style.display = "none";
+      });
+    }
+
+    async function copyToClipboard(text) {
+      if (!text) {
+        throw new Error("Nothing to copy");
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const temp = document.createElement("textarea");
+        temp.value = text;
+        temp.style.position = "fixed";
+        temp.style.opacity = "0";
+        document.body.appendChild(temp);
+        temp.focus();
+        temp.select();
+        document.execCommand("copy");
+        document.body.removeChild(temp);
+      }
+    }
+
+    async function copyToClipboardWithToast(text, message, type) {
+      if (!text || text.trim().length === 0) {
+        showToast("Nothing to copy", "neutral");
+        return;
+      }
+      try {
+        await copyToClipboard(text);
+        if (message) showToast(message, type);
+      } catch (err) {
+        console.error("Copy failed", err);
+        alert("Could not copy automatically, please copy manually.");
+      }
+    }
+
+    if (copyDescriptionBtn) {
+      copyDescriptionBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        copyToClipboardWithToast(descriptionText.textContent || "", "Positive prompt copied", "positive");
+      });
+    }
+    if (copyNegativeBtn) {
+      copyNegativeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        copyToClipboardWithToast(negativeText.textContent || "", "Negative prompt copied", "negative");
+      });
+    }
+    if (copyAllInputsBtn) {
+      copyAllInputsBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!lastParsedMeta || !Array.isArray(lastParsedMeta.inputsEntries)) {
+          showToast("No inputs.text values to copy", "neutral");
+          return;
+        }
+        const joined = lastParsedMeta.inputsEntries
+          .map(e => normalizePromptText(e.text))
+          .filter(t => t && t.trim().length > 0)
+          .join("\n\n");
+        copyToClipboardWithToast(joined, "All inputs.text copied", "neutral");
+      });
+    }
+
+    if (positiveCard) {
+      positiveCard.addEventListener("click", () => {
+        const txt = descriptionText.textContent || "";
+        if (!txt || txt.startsWith("(no Description")) {
+          showToast("No positive prompt to copy", "neutral");
+          return;
+        }
+        copyToClipboardWithToast(txt, "Positive prompt copied", "positive");
+      });
+    }
+
+    if (negativeCard) {
+      negativeCard.addEventListener("click", () => {
+        const txt = negativeText.textContent || "";
+        if (!txt || txt.startsWith("(no negative")) {
+          showToast("No negative prompt to copy", "negative");
+          return;
+        }
+        copyToClipboardWithToast(txt, "Negative prompt copied", "negative");
+      });
+    }
+
+    if (exportJsonBtn) {
+      exportJsonBtn.addEventListener("click", () => {
+        if (!lastParsedMeta) {
+          alert("No image processed yet.");
+          return;
+        }
+        const blob = new Blob([JSON.stringify(lastParsedMeta, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "comfy_prompt.json";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    }
+
+    window.addEventListener("paste", (event) => {
+      const clipboardData = event.clipboardData;
+      if (!clipboardData) return;
+
+      const files = [];
+      for (const item of clipboardData.items) {
+        if (item.kind === "file") {
+          const file = item.getAsFile();
+          if (file) files.push(file);
+        }
+      }
+      if (files.length) {
+        handleFiles(files);
+      }
+    });
+
+    if (inputsSearchEl) {
+      inputsSearchEl.addEventListener("input", () => {
+        filterState.search = inputsSearchEl.value || "";
+        applyFiltersAndRender();
+      });
+    }
+
+    if (filterButtons && filterButtons.length) {
+      filterButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const type = btn.getAttribute("data-filter");
+          if (!type) return;
+
+          if (type === "hide-duplicates") {
+            filterState.hideDuplicates = !filterState.hideDuplicates;
+            btn.classList.toggle("active", filterState.hideDuplicates);
+          } else if (type === "only-long") {
+            filterState.onlyLong = !filterState.onlyLong;
+            btn.classList.toggle("active", filterState.onlyLong);
+          } else if (type === "only-title") {
+            filterState.onlyWithTitle = !filterState.onlyWithTitle;
+            btn.classList.toggle("active", filterState.onlyWithTitle);
+          }
+          applyFiltersAndRender();
+        });
+      });
+    }
+
+    renderHistory();
   </script>
 </body>
 </html>
